@@ -7,7 +7,7 @@ Tools to download houou (phoenix) logs from tenhou.net
 ```sh
 # With pip.
 houou-logs$ pip install .
-# With uv. If you install it this way, you need to prefix the command with `uv tool run`.
+# With uv.
 houou-logs$ uv tool install .
 ```
 
