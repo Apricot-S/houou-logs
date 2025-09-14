@@ -1,7 +1,7 @@
 [project]
 name = "houou-logs"
 version = "0.0.1"
-description = "Tools to download phoenix logs from tenhou.net"
+description = "Tools to download houou (phoenix) logs from tenhou.net"
 authors = [
     { name = "Apricot S." }
 ]
