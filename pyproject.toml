@@ -1,0 +1,76 @@
+[project]
+name = "houou-logs"
+version = "0.0.1"
+description = "Tools to download phoenix logs from tenhou.net"
+authors = [
+    { name = "Apricot S." }
+]
+license = "MIT"
+license-files = ["LICENSE", "THIRD-PARTY-NOTICES.md"]
+readme = "README.md"
+requires-python = ">= 3.12"
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "requests>=2.32.5,<3",
+    "tqdm>=4.67.1,<5",
+]
+
+[project.scripts]
+houou-logs = "houou_logs.main:main"
+
+[project.urls]
+Repository = "https://github.com/Apricot-S/houou-logs.git"
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    { include-group = "lint" },
+    { include-group = "typing" },
+]
+lint = [
+    "ruff>=0.13.0,<0.14",
+]
+typing = [
+    "mypy>=1.18.1,<2",
+    "types-requests>=2.32.4.20250913",
+    "types-tqdm>=4.67.0.20250809",
+]
+
+[tool.ruff]
+target-version = "py312"
+src = ["src"]
+extend-exclude = ["env"]
+line-length = 79
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D", # pydocstyle
+
+    "C901",    # complex-structure
+    "ANN002",  # missing-type-args
+    "ANN003",  # missing-type-kwargs
+    "TD002",   # missing-todo-author
+    "TD003",   # missing-todo-link
+    "PLR0911", # too-many-return-statements
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0915", # too-many-statements
+
+    "T201",    # print
+]
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 72
+ignore-overlong-task-comments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
