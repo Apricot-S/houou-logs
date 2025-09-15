@@ -44,7 +44,7 @@ def extract_cli(args: argparse.Namespace) -> None:
 # 5. 4をすべてのファイルに対して実行する -> 実装
 def extract(db_path: str | Path, archive_path: Path) -> None:
     validate_archive(archive_path)
-    with closing(db.open_db(db_path)) as conn:
+    with closing(db.open_db(db_path)) as conn, conn:
         db.setup_table(conn)
         cursor = conn.cursor()
 
