@@ -15,7 +15,7 @@ def test_open_db_create_file(db_path: Path) -> None:
         conn.close()
 
 
-def test_db_persists_after_reopen(db_path: Path) -> None:
+def test_open_db_persists_after_reopen(db_path: Path) -> None:
     # 1st time: Create DB & insert data
     conn1 = db.open_db(db_path)
     conn1.execute("CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT)")
