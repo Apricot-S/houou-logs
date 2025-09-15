@@ -78,3 +78,8 @@ ignore-overlong-task-comments = true
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.extend-per-file-ignores]
+"./tests/*" = [
+    "S101", # assert
+]
