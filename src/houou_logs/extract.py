@@ -3,8 +3,10 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import argparse
-import zipfile
+from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
+from zipfile import ZipFile, ZipInfo, is_zipfile
 
 from houou_logs import db
 from houou_logs.log_id import extract_log_entries
@@ -41,29 +43,35 @@ def extract_cli(args: argparse.Namespace) -> None:
 #    d. 抽出したidをdbに追加する -> 実装
 # 5. 4をすべてのファイルに対して実行する -> 実装
 def extract(db_path: str | Path, archive_path: Path) -> None:
+    validate_archive(archive_path)
+    with closing(db.open_db(db_path)) as conn:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        with ZipFile(archive_path) as zf:
+            for info in iter_target_files(zf):
+                entries = process_file(zf, info)
+                db.insert_entries(cursor, entries)
+
+
+def validate_archive(archive_path: Path) -> None:
     if not archive_path.is_file():
         msg = f"archive file not found: {archive_path}"
         raise FileNotFoundError(msg)
 
-    if not zipfile.is_zipfile(archive_path):
+    if not is_zipfile(archive_path):
         msg = f"archive file must be zip file: {archive_path}"
         raise ValueError(msg)
 
-    conn = db.open_db(db_path)
-    with conn:
-        try:
-            db.setup_table(conn)
-            cursor = conn.cursor()
 
-            with zipfile.ZipFile(archive_path) as zf:
-                for info in zf.infolist():
-                    if info.is_dir():
-                        continue
-                    if not info.filename.startswith(HOUOU_ARCHIVE_PREFIX):
-                        continue
+def iter_target_files(zf: ZipFile) -> Iterator[ZipInfo]:
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        if info.filename.startswith(HOUOU_ARCHIVE_PREFIX):
+            yield info
 
-                    with zf.open(info) as f:
-                        entries = extract_log_entries(info.filename, f)
-                        db.insert_entries(cursor, entries)
-        finally:
-            conn.close()
+
+def process_file(zf: ZipFile, info: ZipInfo) -> list[db.LogEntry]:
+    with zf.open(info) as f:
+        return extract_log_entries(info.filename, f)
