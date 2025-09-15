@@ -35,7 +35,7 @@ def extract_cli(args: argparse.Namespace) -> None:
 # 3. dbのテーブルを作成する。既存のテーブルがあるならスキップする -> 実装
 # 3. アーカイブファイルをzip展開する -> 実装
 # 4. ディレクトリ内のファイルに対して以下を実行する -> 仮実装
-#    a. ファイル名がsccで始まるファイルを選択する
+#    a. ファイル名がsccで始まるファイルを選択する -> 実装
 #    b. html.gzなら展開する
 #    c. html から対局idを抽出する
 #    d. 抽出したidをdbに追加する -> 実装
@@ -63,7 +63,7 @@ def extract(db_path: str | Path, archive_path: Path) -> None:
                         continue
 
                     with zf.open(info) as f:
-                        entries = extract_log_entries(f)
+                        entries = extract_log_entries(info.filename, f)
                         db.insert_entries(cursor, entries)
         finally:
             conn.close()
