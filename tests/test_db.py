@@ -48,3 +48,41 @@ def test_setup_table() -> None:
         assert table[0] == "logs"
     finally:
         conn.close()
+
+
+def test_insert_entries() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        entries = [
+            db.LogEntry(
+                id="2009010100gm-00a9-0000-00000000",
+                date="2009-01-01",
+                num_players=4,
+                is_tonpu=False,
+                is_processed=False,
+                was_error=False,
+                log=None,
+            ),
+            db.LogEntry(
+                id="2013020100gm-00f1-0000-00000000",
+                date="2013-02-01",
+                num_players=3,
+                is_tonpu=True,
+                is_processed=True,
+                was_error=True,
+                log=b"sample log data",
+            ),
+        ]
+
+        db.insert_entries(cursor, entries)
+        conn.commit()
+
+        cursor.execute("SELECT * FROM logs;")
+        rows = cursor.fetchall()
+        assert len(rows) == len(entries)
+    finally:
+        conn.close()
