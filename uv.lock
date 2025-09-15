@@ -74,6 +74,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "pytest" },
     { name = "ruff" },
     { name = "types-requests" },
     { name = "types-tqdm" },
@@ -99,12 +100,13 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=1.18.1,<2" },
+    { name = "pytest", specifier = ">=8.4.2,<9" },
     { name = "ruff", specifier = ">=0.13.0,<0.14" },
     { name = "types-requests", specifier = ">=2.32.4.20250913" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250809" },
 ]
 lint = [{ name = "ruff", specifier = ">=0.13.0,<0.14" }]
-test = [{ name = "pytest", specifier = ">=8.4.2" }]
+test = [{ name = "pytest", specifier = ">=8.4.2,<9" }]
 typing = [
     { name = "mypy", specifier = ">=1.18.1,<2" },
     { name = "types-requests", specifier = ">=2.32.4.20250913" },
