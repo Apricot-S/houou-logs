@@ -33,10 +33,14 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     { include-group = "lint" },
+    { include-group = "test" },
     { include-group = "typing" },
 ]
 lint = [
     "ruff>=0.13.0,<0.14",
+]
+test = [
+    "pytest>=8.4.2,<9",
 ]
 typing = [
     "mypy>=1.18.1,<2",
