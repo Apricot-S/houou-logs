@@ -32,16 +32,6 @@ def extract_cli(args: argparse.Namespace) -> None:
     extract(args.db_path, args.archive_path)
 
 
-# 1. 指定されたパスのアーカイブファイルの存在チェックをする -> 実装
-# 2. 指定されたパスのsqliteのdbを開く。dbがないなら作成する -> 実装
-# 3. dbのテーブルを作成する。既存のテーブルがあるならスキップする -> 実装
-# 3. アーカイブファイルをzip展開する -> 実装
-# 4. ディレクトリ内のファイルに対して以下を実行する -> 仮実装
-#    a. ファイル名がsccで始まるファイルを選択する -> 実装
-#    b. html.gzなら展開する
-#    c. html から対局idを抽出する
-#    d. 抽出したidをdbに追加する -> 実装
-# 5. 4をすべてのファイルに対して実行する -> 実装
 def extract(db_path: str | Path, archive_path: Path) -> None:
     validate_archive(archive_path)
     with closing(db.open_db(db_path)) as conn, conn:
