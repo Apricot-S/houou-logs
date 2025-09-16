@@ -6,7 +6,7 @@ import gzip
 from html.parser import HTMLParser
 from typing import IO
 
-from houou_logs import db
+from houou_logs.db import LogEntry
 
 
 class LogParser(HTMLParser):
@@ -30,10 +30,7 @@ class LogParser(HTMLParser):
 # c. HTMLパーサーから対局idを抽出する
 # d. 対局idをDBエントリに変換する
 # e. DBエントリのリストを返す
-def extract_log_entries(
-    filename: str,
-    fileobj: IO[bytes],
-) -> list[db.LogEntry]:
+def extract_log_entries(filename: str, fileobj: IO[bytes]) -> list[LogEntry]:
     if filename.endswith(".gz"):
         # Logs from 2013 onwards are compressed
         with gzip.open(fileobj, mode="rt", encoding="utf-8") as gz:
@@ -48,5 +45,5 @@ def extract_ids_from_html(html: str) -> list[str]:
     return []  # TODO: implement
 
 
-def parse_id(id: str) -> db.LogEntry:
+def parse_id(id: str) -> LogEntry:
     raise NotImplementedError
