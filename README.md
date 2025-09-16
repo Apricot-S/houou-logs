@@ -28,7 +28,7 @@ houou-logs extract db/2024.db scraw2024.zip
 ### Fetch latest log IDs
 
 ```sh
-houou-logs fetch <db-path> [--start]
+houou-logs fetch <db-path> [--archive]
 ```
 
 Example:
@@ -38,7 +38,7 @@ houou-logs fetch db/latest.db
 ```
 
 ```sh
-houou-logs fetch db/latest.db --start
+houou-logs fetch db/latest.db --archive
 ```
 
 ### Fetch yakuman log IDs
