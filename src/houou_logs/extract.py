@@ -49,7 +49,7 @@ def extract(db_path: str | Path, archive_path: Path) -> None:
         cursor = conn.cursor()
 
         with ZipFile(archive_path) as zf:
-            for info in iter_target_files(zf):
+            for info in iter_houou_archive_files(zf):
                 entries = process_file(zf, info)
                 db.insert_entries(cursor, entries)
 
@@ -64,7 +64,7 @@ def validate_archive(archive_path: Path) -> None:
         raise ValueError(msg)
 
 
-def iter_target_files(zf: ZipFile) -> Iterator[ZipInfo]:
+def iter_houou_archive_files(zf: ZipFile) -> Iterator[ZipInfo]:
     for info in zf.infolist():
         if info.is_dir():
             continue
