@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
-import argparse
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
@@ -12,24 +11,6 @@ from houou_logs import db
 from houou_logs.log_id import extract_log_entries
 
 HOUOU_ARCHIVE_PREFIX = "scc"
-
-
-def set_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    parser.add_argument(
-        "db-path",
-        type=Path,
-        help="Path to the SQLite database file.",
-    )
-    parser.add_argument(
-        "archive-path",
-        type=Path,
-        help="Path to an archive file (.zip).",
-    )
-    return parser
-
-
-def extract_cli(args: argparse.Namespace) -> None:
-    extract(args.db_path, args.archive_path)
 
 
 def extract(db_path: str | Path, archive_path: Path) -> None:

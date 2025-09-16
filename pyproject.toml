@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-houou-logs = "houou_logs.main:main"
+houou-logs = "houou_logs.cli:main"
 
 [project.urls]
 Repository = "https://github.com/Apricot-S/houou-logs.git"

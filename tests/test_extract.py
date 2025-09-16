@@ -2,39 +2,13 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
-from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock
 from zipfile import ZipFile, ZipInfo
 
 import pytest
 
-from houou_logs.extract import (
-    extract_cli,
-    iter_houou_archive_files,
-    set_args,
-    validate_archive,
-)
-
-
-def test_set_args_parses_correctly() -> None:
-    parser = set_args(ArgumentParser())
-    args = parser.parse_args(["db.sqlite", "data.zip"])
-    assert args.db_path == Path("db.sqlite")
-    assert args.archive_path == Path("data.zip")
-
-
-def test_set_args_missing_args() -> None:
-    parser = set_args(ArgumentParser())
-    with pytest.raises(SystemExit):
-        parser.parse_args(["db.sqlite"])
-
-
-@patch("houou_logs.extract.extract")
-def test_extract_cli_calls_extract(mock_extract: Mock) -> None:
-    args = Namespace(db_path=Path("db.sqlite"), archive_path=Path("data.zip"))
-    extract_cli(args)
-    mock_extract.assert_called_once_with(Path("db.sqlite"), Path("data.zip"))
+from houou_logs.extract import iter_houou_archive_files, validate_archive
 
 
 def test_validate_archive_raises_if_file_not_found() -> None:
