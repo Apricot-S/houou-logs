@@ -16,12 +16,12 @@ HOUOU_ARCHIVE_PREFIX = "scc"
 
 def set_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument(
-        "db_path",
+        "db-path",
         type=Path,
         help="Path to the SQLite database file.",
     )
     parser.add_argument(
-        "archive_path",
+        "archive-path",
         type=Path,
         help="Path to an archive file (.zip).",
     )
