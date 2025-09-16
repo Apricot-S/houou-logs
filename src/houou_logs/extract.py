@@ -50,7 +50,8 @@ def extract(db_path: str | Path, archive_path: Path) -> None:
 
         with ZipFile(archive_path) as zf:
             for info in iter_houou_archive_files(zf):
-                entries = process_file(zf, info)
+                with zf.open(info) as f:
+                    entries = extract_log_entries(info.filename, f)
                 db.insert_entries(cursor, entries)
 
 
@@ -70,8 +71,3 @@ def iter_houou_archive_files(zf: ZipFile) -> Iterator[ZipInfo]:
             continue
         if info.filename.startswith(HOUOU_ARCHIVE_PREFIX):
             yield info
-
-
-def process_file(zf: ZipFile, info: ZipInfo) -> list[db.LogEntry]:
-    with zf.open(info) as f:
-        return extract_log_entries(info.filename, f)
