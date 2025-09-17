@@ -23,7 +23,7 @@ houou-logs extract <db-path> <archive-path>
 
 ### Example
 
-The following example imports game IDs for the year 2009.
+The following example imports log IDs for the year 2009.
 
 > [!NOTE]
 > Houou (Phoenix) games are available starting from 2009.
