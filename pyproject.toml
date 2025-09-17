@@ -81,5 +81,6 @@ convention = "google"
 
 [tool.ruff.lint.extend-per-file-ignores]
 "./tests/*" = [
-    "S101", # assert
+    "S101",    # assert
+    "PLR2004", # magic-value-comparison
 ]
