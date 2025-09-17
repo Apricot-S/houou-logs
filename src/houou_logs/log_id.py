@@ -4,10 +4,14 @@
 
 import gzip
 import re
+from functools import cache
 from html.parser import HTMLParser
 from typing import IO
 
 from houou_logs.db import LogEntry
+
+TYPE_IS_HANCHAN = 0x008
+TYPE_IS_3_PLAYERS = 0x010
 
 
 class LogParser(HTMLParser):
@@ -45,19 +49,44 @@ class LogParser(HTMLParser):
         self.ids = []
 
 
-_log_parser = LogParser()
+@cache
+def get_log_parser() -> LogParser:
+    return LogParser()
 
 
-def parse_id(id: str) -> LogEntry:
-    raise NotImplementedError
+def parse_date(log_date: str) -> str:
+    year = log_date[0:4]
+    month = log_date[4:6]
+    day = log_date[6:8]
+    hour = log_date[8:10]
+    return f"{year}-{month}-{day} {hour}"
 
 
-# b. html.gzなら展開する
-# c. htmlを開く
-# c. htmlをHTMLパーサーに変換する
-# c. HTMLパーサーから対局idを抽出する
-# d. 対局idをDBエントリに変換する
-# e. DBエントリのリストを返す
+def parse_type(log_type: str) -> tuple[int, bool]:
+    t = int(log_type, 16)
+    is_3p = (t & TYPE_IS_3_PLAYERS) == TYPE_IS_3_PLAYERS
+    is_hanchan = (t & TYPE_IS_HANCHAN) == TYPE_IS_HANCHAN
+
+    num_players = 3 if is_3p else 4
+    is_tonpu = not is_hanchan
+    return (num_players, is_tonpu)
+
+
+def parse_id(log_id: str) -> LogEntry:
+    date = parse_date(log_id[0:10])
+    num_players, is_tonpu = parse_type(log_id[13:17])
+
+    return LogEntry(
+        log_id,
+        date,
+        num_players,
+        is_tonpu,
+        is_processed=False,
+        was_error=False,
+        log=None,
+    )
+
+
 def extract_log_entries(filename: str, fileobj: IO[bytes]) -> list[LogEntry]:
     if filename.endswith(".html.gz"):
         # Logs from 2013 onwards are compressed
@@ -66,5 +95,6 @@ def extract_log_entries(filename: str, fileobj: IO[bytes]) -> list[LogEntry]:
     else:
         text = str(fileobj.read())
 
-    ids = _log_parser.extract_ids(text)
-    return list(map(parse_id, ids))
+    parser = get_log_parser()
+    ids = parser.extract_ids(text)
+    return [parse_id(i) for i in ids]
