@@ -13,19 +13,6 @@ from houou_logs.log_id import extract_log_entries
 HOUOU_ARCHIVE_PREFIX = "scc"
 
 
-def extract(db_path: str | Path, archive_path: Path) -> None:
-    validate_archive(archive_path)
-    with closing(db.open_db(db_path)) as conn, conn:
-        db.setup_table(conn)
-        cursor = conn.cursor()
-
-        with ZipFile(archive_path) as zf:
-            for info in iter_houou_archive_files(zf):
-                with zf.open(info) as f:
-                    entries = extract_log_entries(info.filename, f)
-                db.insert_entries(cursor, entries)
-
-
 def validate_archive(archive_path: Path) -> None:
     if not archive_path.is_file():
         msg = f"archive file not found: {archive_path}"
@@ -42,3 +29,16 @@ def iter_houou_archive_files(zf: ZipFile) -> Iterator[ZipInfo]:
             continue
         if info.filename.startswith(HOUOU_ARCHIVE_PREFIX):
             yield info
+
+
+def extract(db_path: str | Path, archive_path: Path) -> None:
+    validate_archive(archive_path)
+    with closing(db.open_db(db_path)) as conn, conn:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        with ZipFile(archive_path) as zf:
+            for info in iter_houou_archive_files(zf):
+                with zf.open(info) as f:
+                    entries = extract_log_entries(info.filename, f)
+                db.insert_entries(cursor, entries)
