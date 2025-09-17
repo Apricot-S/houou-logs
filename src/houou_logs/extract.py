@@ -27,7 +27,8 @@ def iter_houou_archive_files(zf: ZipFile) -> Iterator[ZipInfo]:
     for info in zf.infolist():
         if info.is_dir():
             continue
-        if info.filename.startswith(HOUOU_ARCHIVE_PREFIX):
+        filename = Path(info.filename).name
+        if filename.startswith(HOUOU_ARCHIVE_PREFIX):
             yield info
 
 

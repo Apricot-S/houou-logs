@@ -59,7 +59,7 @@ def test_iter_houou_archive_files_skips_non_matching_files() -> None:
 def test_iter_houou_archive_files_yields_matching_files() -> None:
     mock_info = MagicMock(spec_set=ZipInfo)
     mock_info.is_dir.return_value = False
-    mock_info.filename = "scc20240312.html.gz"
+    mock_info.filename = "2024/scc20240312.html.gz"
 
     zf = MagicMock(spec_set=ZipFile)
     zf.infolist.return_value = [mock_info]
