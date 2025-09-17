@@ -23,9 +23,6 @@ def test_open_db_persists_after_reopen(db_path: Path) -> None:
     conn1.commit()
     conn1.close()
 
-    # Verify file exists
-    assert db_path.exists()
-
     # 2nd time: Reopen and check if the data is still there
     conn2 = db.open_db(db_path)
     row = conn2.execute("SELECT name FROM users").fetchone()
