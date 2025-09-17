@@ -8,9 +8,9 @@ from houou_logs.db import LogEntry
 from houou_logs.log_id import LogParser, extract_log_entries
 
 MOCK_LOG = """
-00:00 | 07 | 四鳳南喰赤 | <a href="http://tenhou.net/0/?log=2009020101gm-00a9-0000-00000000">牌譜</a> | EXAMPLE2(+47) EXAMPLE(+1) EXAMPLE4(-19) EXAMPLE3(-29)<br>
+00:00 | 07 | 四鳳南喰赤 | <a href="http://tenhou.net/0/?log=2009020100gm-00a9-0000-00000000">牌譜</a> | EXAMPLE2(+47) EXAMPLE(+1) EXAMPLE4(-19) EXAMPLE3(-29)<br>
 
-23:02 | 35 | 四鳳南喰赤 | <a href="http://tenhou.net/0/?log=2009020101gm-00a9-0000-00000001">牌譜</a> | EXAMPLE(+38) EXAMPLE2(+4) EXAMPLE4(-16) EXAMPLE3(-26)<br>
+23:02 | 35 | 四鳳南喰赤 | <a href="http://tenhou.net/0/?log=2009020123gm-00a9-0000-00000001">牌譜</a> | EXAMPLE(+38) EXAMPLE2(+4) EXAMPLE4(-16) EXAMPLE3(-26)<br>
 
 """  # noqa: E501
 
