@@ -6,7 +6,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
-from . import extract
+from . import extract, fetch
 
 
 def set_extract_args(parser: ArgumentParser) -> ArgumentParser:
@@ -49,6 +49,14 @@ def set_fetch_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
+def fetch_cli(args: Namespace) -> None:
+    num_logs = fetch.fetch(args.db_path, archive=args.archive)
+    print(
+        f"Number of log entries targeted for DB insertion: {num_logs}",
+        file=sys.stderr,
+    )
+
+
 def main() -> None:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -59,6 +67,7 @@ def main() -> None:
 
     parser_fetch = subparsers.add_parser("fetch")
     parser_fetch = set_fetch_args(parser_fetch)
+    parser_extract.set_defaults(func=fetch_cli)
 
     args = parser.parse_args()
     args.func(args)

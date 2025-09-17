@@ -8,7 +8,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from houou_logs.cli import extract_cli, set_extract_args, set_fetch_args
+from houou_logs.cli import (
+    extract_cli,
+    fetch_cli,
+    set_extract_args,
+    set_fetch_args,
+)
 
 
 def test_set_extract_args_parses_correctly() -> None:
@@ -49,3 +54,10 @@ def test_set_fetch_args_missing_args() -> None:
     parser = set_fetch_args(ArgumentParser())
     with pytest.raises(SystemExit):
         parser.parse_args([])
+
+
+@patch("houou_logs.fetch.fetch")
+def test_fetch_cli_calls_fetch(mock_fetch: Mock) -> None:
+    args = Namespace(db_path=Path("db.sqlite"), archive=True)
+    fetch_cli(args)
+    mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=True)
