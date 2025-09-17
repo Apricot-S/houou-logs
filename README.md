@@ -13,16 +13,27 @@ houou-logs$ uv tool install .
 
 ## Usage
 
-### Extract log IDs from archive (per year)
+### Extract log IDs from an archive (per year)
+
+Import a list of log IDs into the database.
 
 ```sh
 houou-logs extract <db-path> <archive-path>
 ```
 
-Example:
+### Example
+
+The following example imports game IDs for the year 2009.
+
+> [!NOTE]
+> Houou (Phoenix) games are available starting from 2009.
+
+1. Download the archive file manually: `https://tenhou.net/sc/raw/scraw2009.zip`
+2. Place the file in the current working directory.
+3. Run:
 
 ```sh
-houou-logs extract db/2024.db scraw2024.zip
+houou-logs extract db/2009.db scraw2009.zip
 ```
 
 ### Fetch latest log IDs
