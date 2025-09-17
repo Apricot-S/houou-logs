@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
@@ -25,7 +26,11 @@ def set_extract_args(parser: ArgumentParser) -> ArgumentParser:
 
 
 def extract_cli(args: Namespace) -> None:
-    extract.extract(args.db_path, args.archive_path)
+    num_logs = extract.extract(args.db_path, args.archive_path)
+    print(
+        f"Number of log entries targeted for DB insertion: {num_logs}",
+        file=sys.stderr,
+    )
 
 
 def main() -> None:

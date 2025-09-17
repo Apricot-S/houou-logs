@@ -32,8 +32,10 @@ def iter_houou_archive_files(zf: ZipFile) -> Iterator[ZipInfo]:
             yield info
 
 
-def extract(db_path: str | Path, archive_path: Path) -> None:
+def extract(db_path: str | Path, archive_path: Path) -> int:
     validate_archive(archive_path)
+
+    num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:
         db.setup_table(conn)
         cursor = conn.cursor()
@@ -42,4 +44,7 @@ def extract(db_path: str | Path, archive_path: Path) -> None:
             for info in iter_houou_archive_files(zf):
                 with zf.open(info) as f:
                     entries = extract_log_entries(info.filename, f)
+                    num_logs += len(entries)
                 db.insert_entries(cursor, entries)
+
+    return num_logs
