@@ -21,7 +21,7 @@ Import a list of log IDs into the database.
 houou-logs extract <db-path> <archive-path>
 ```
 
-### Example
+#### Example
 
 The following example imports log IDs for the year 2009.
 
