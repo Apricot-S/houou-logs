@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
+import re
 from html.parser import HTMLParser
 from typing import IO
 
@@ -10,18 +11,45 @@ from houou_logs.db import LogEntry
 
 
 class LogParser(HTMLParser):
+    TARGET_TAG = "a"
+    TARGET_ATTR = "href"
+    LOG_PATTERN = re.compile(r"log=([^\"]+)")
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ids: list[str] = []
+
     def handle_starttag(
         self,
         tag: str,
         attrs: list[tuple[str, str | None]],
     ) -> None:
-        pass
+        if tag != self.TARGET_TAG:
+            return
 
-    def handle_endtag(self, tag: str) -> None:
-        pass
+        for attr_name, attr_value in attrs:
+            if attr_name != self.TARGET_ATTR:
+                continue
+            if attr_value is None:
+                continue
+            if match := self.LOG_PATTERN.search(attr_value):
+                self.ids.append(match.group(1))
 
-    def handle_data(self, data: str) -> None:
-        pass
+    def extract_ids(self, html: str) -> list[str]:
+        self.feed(html)
+        ids = self.ids
+        self.clear_ids()
+        return ids
+
+    def clear_ids(self) -> None:
+        self.ids = []
+
+
+_log_parser = LogParser()
+
+
+def parse_id(id: str) -> LogEntry:
+    raise NotImplementedError
 
 
 # b. html.gzなら展開する
@@ -31,19 +59,12 @@ class LogParser(HTMLParser):
 # d. 対局idをDBエントリに変換する
 # e. DBエントリのリストを返す
 def extract_log_entries(filename: str, fileobj: IO[bytes]) -> list[LogEntry]:
-    if filename.endswith(".gz"):
+    if filename.endswith(".html.gz"):
         # Logs from 2013 onwards are compressed
         with gzip.open(fileobj, mode="rt", encoding="utf-8") as gz:
             text = gz.read()
     else:
         text = str(fileobj.read())
 
-    return []  # TODO: implement
-
-
-def extract_ids_from_html(html: str) -> list[str]:
-    return []  # TODO: implement
-
-
-def parse_id(id: str) -> LogEntry:
-    raise NotImplementedError
+    ids = _log_parser.extract_ids(text)
+    return list(map(parse_id, ids))
