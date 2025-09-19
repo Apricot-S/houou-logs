@@ -4,6 +4,7 @@
 
 import sqlite3
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -38,6 +39,21 @@ def setup_table(conn: sqlite3.Connection) -> None:
             """,
         )
 
+        cursor = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+                AND name='last_fetch_time';
+            """,
+        )
+        exists = cursor.fetchone() is not None
+        if exists:
+            return
+
+        conn.execute("CREATE TABLE last_fetch_time (time REAL);")
+        conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (0.0,))
+
 
 def insert_entries(cursor: sqlite3.Cursor, entries: list[LogEntry]) -> None:
     if not entries:
@@ -69,4 +85,13 @@ def insert_entries(cursor: sqlite3.Cursor, entries: list[LogEntry]) -> None:
             log=excluded.log;
         """,  # noqa: E501
         values,
+    )
+
+
+def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
+    cursor.execute(
+        """
+        UPDATE last_fetch_time SET time = ?;
+        """,
+        (time.astimezone(UTC).timestamp(),),
     )

@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+from datetime import UTC, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from houou_logs import db
 
@@ -31,18 +33,41 @@ def test_open_db_persists_after_reopen(db_path: Path) -> None:
     assert row == ("Alice",)
 
 
-def test_setup_table() -> None:
+def test_setup_table_creates_logs_table() -> None:
     conn = db.open_db(":memory:")
 
     try:
         db.setup_table(conn)
 
         cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='logs';",  # noqa: E501
+            """
+            SELECT name FROM sqlite_master WHERE type='table' AND name='logs';
+            """,
         )
         table = cursor.fetchone()
         assert table is not None
         assert table[0] == "logs"
+    finally:
+        conn.close()
+
+
+def test_setup_table_creates_last_fetch_time_table() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+
+        cursor = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+                AND name='last_fetch_time';
+            """,
+        )
+        table = cursor.fetchone()
+        assert table is not None
+        assert table[0] == "last_fetch_time"
     finally:
         conn.close()
 
@@ -81,5 +106,71 @@ def test_insert_entries() -> None:
         cursor.execute("SELECT * FROM logs;")
         rows = cursor.fetchall()
         assert len(rows) == len(entries)
+    finally:
+        conn.close()
+
+
+def test_update_last_fetch_time() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        zone_info = ZoneInfo("Asia/Tokyo")
+        time = datetime(2025, 9, 20, 10, 30, 40, 500, tzinfo=zone_info)
+        timestamp = time.astimezone(UTC).timestamp()
+
+        db.update_last_fetch_time(cursor, time)
+        conn.commit()
+
+        cursor.execute("SELECT * FROM last_fetch_time;")
+        rows = cursor.fetchall()
+        assert rows[0][0] == timestamp
+    finally:
+        conn.close()
+
+
+def test_update_last_fetch_time_has_only_one_row() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        zone_info = ZoneInfo("Asia/Tokyo")
+        time1 = datetime(2025, 9, 20, 10, 30, 40, 500, tzinfo=zone_info)
+        time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
+
+        db.update_last_fetch_time(cursor, time1)
+        db.update_last_fetch_time(cursor, time2)
+        conn.commit()
+
+        cursor.execute("SELECT * FROM last_fetch_time;")
+        rows = cursor.fetchall()
+        assert len(rows) == 1
+    finally:
+        conn.close()
+
+
+def test_update_last_fetch_time_has_only_last_time() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        zone_info = ZoneInfo("Asia/Tokyo")
+        time1 = datetime(2025, 9, 20, 10, 30, 40, 500, tzinfo=zone_info)
+        time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
+        timestamp = time2.astimezone(UTC).timestamp()
+
+        db.update_last_fetch_time(cursor, time1)
+        db.update_last_fetch_time(cursor, time2)
+        conn.commit()
+
+        cursor.execute("SELECT * FROM last_fetch_time;")
+        rows = cursor.fetchall()
+        assert rows[0][0] == timestamp
     finally:
         conn.close()

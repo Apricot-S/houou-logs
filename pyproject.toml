@@ -41,6 +41,7 @@ lint = [
 ]
 test = [
     "pytest>=8.4.2,<9",
+    "tzdata>=2025.2",
 ]
 typing = [
     "mypy>=1.18.1,<2",
