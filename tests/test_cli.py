@@ -9,31 +9,31 @@ from unittest.mock import Mock, patch
 import pytest
 
 from houou_logs.cli import (
-    extract_cli,
     fetch_cli,
-    set_extract_args,
+    import_cli,
     set_fetch_args,
+    set_import_args,
 )
 
 
-def test_set_extract_args_parses_correctly() -> None:
-    parser = set_extract_args(ArgumentParser())
+def test_set_import_args_parses_correctly() -> None:
+    parser = set_import_args(ArgumentParser())
     args = parser.parse_args(["db.sqlite", "data.zip"])
     assert args.db_path == Path("db.sqlite")
     assert args.archive_path == Path("data.zip")
 
 
-def test_set_extract_args_missing_args() -> None:
-    parser = set_extract_args(ArgumentParser())
+def test_set_import_args_missing_args() -> None:
+    parser = set_import_args(ArgumentParser())
     with pytest.raises(SystemExit):
         parser.parse_args(["db.sqlite"])
 
 
-@patch("houou_logs.extract.extract")
-def test_extract_cli_calls_extract(mock_extract: Mock) -> None:
+@patch("houou_logs.import_.import_")
+def test_import_cli_calls_import(mock_import: Mock) -> None:
     args = Namespace(db_path=Path("db.sqlite"), archive_path=Path("data.zip"))
-    extract_cli(args)
-    mock_extract.assert_called_once_with(Path("db.sqlite"), Path("data.zip"))
+    import_cli(args)
+    mock_import.assert_called_once_with(Path("db.sqlite"), Path("data.zip"))
 
 
 def test_set_fetch_args_latest() -> None:

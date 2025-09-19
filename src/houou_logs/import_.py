@@ -32,7 +32,7 @@ def iter_houou_archive_files(zf: ZipFile) -> Iterator[ZipInfo]:
             yield info
 
 
-def extract(db_path: str | Path, archive_path: Path) -> int:
+def import_(db_path: str | Path, archive_path: Path) -> int:
     validate_archive(archive_path)
 
     num_logs = 0

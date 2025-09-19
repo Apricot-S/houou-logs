@@ -8,7 +8,7 @@ from zipfile import ZipFile, ZipInfo
 
 import pytest
 
-from houou_logs.extract import iter_houou_archive_files, validate_archive
+from houou_logs.import_ import iter_houou_archive_files, validate_archive
 
 
 def test_validate_archive_raises_if_file_not_found() -> None:

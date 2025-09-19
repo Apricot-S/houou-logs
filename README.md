@@ -13,12 +13,12 @@ houou-logs$ uv tool install .
 
 ## Usage
 
-### Extract log IDs from an archive (per year)
+### Import log IDs from an archive (per year)
 
 Import a list of log IDs into the database.
 
 ```sh
-houou-logs extract <db-path> <archive-path>
+houou-logs import <db-path> <archive-path>
 ```
 
 #### Example
@@ -33,7 +33,7 @@ The following example imports log IDs for the year 2009.
 3. Run:
 
 ```sh
-houou-logs extract db/2009.db scraw2009.zip
+houou-logs import db/2009.db scraw2009.zip
 ```
 
 ### Fetch latest log IDs
