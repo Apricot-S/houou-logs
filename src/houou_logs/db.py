@@ -43,7 +43,7 @@ def insert_entries(cursor: sqlite3.Cursor, entries: list[LogEntry]) -> None:
     if not entries:
         return
 
-    values = [
+    values = (
         (
             entry.id,
             entry.date,
@@ -54,7 +54,7 @@ def insert_entries(cursor: sqlite3.Cursor, entries: list[LogEntry]) -> None:
             entry.log,
         )
         for entry in entries
-    ]
+    )
 
     cursor.executemany(
         """
