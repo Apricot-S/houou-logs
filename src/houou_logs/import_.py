@@ -8,9 +8,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZipInfo, is_zipfile
 
 from houou_logs import db
-from houou_logs.log_id import extract_log_entries
-
-HOUOU_ARCHIVE_PREFIX = "scc"
+from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, extract_log_entries
 
 
 def validate_archive(archive_path: Path) -> None:

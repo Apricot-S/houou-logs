@@ -6,7 +6,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
-from . import fetch, import_
+from houou_logs import fetch, import_
 
 
 def set_import_args(parser: ArgumentParser) -> ArgumentParser:

@@ -9,7 +9,8 @@ from pathlib import Path
 
 import requests
 
-from . import db
+from houou_logs import db
+from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX
 
 MIN_FETCH_INTERVAL = timedelta(minutes=20)
 
@@ -26,8 +27,6 @@ TIMEOUT = (
 )
 
 FILE_INDEX_ENTRY_PATTERN = re.compile(r"file:'([^']+)',size:(\d+)")
-
-HOUOU_ARCHIVE_PREFIX = "scc"
 
 
 def should_fetch(

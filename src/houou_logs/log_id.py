@@ -10,6 +10,8 @@ from typing import IO
 
 from houou_logs.db import LogEntry
 
+HOUOU_ARCHIVE_PREFIX = "scc"
+
 TYPE_IS_HANCHAN = 0x008
 TYPE_IS_3_PLAYERS = 0x010
 
