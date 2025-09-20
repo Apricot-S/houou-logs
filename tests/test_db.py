@@ -277,3 +277,24 @@ def test_insert_file_index_update() -> None:
         assert file_index[file] == size2
     finally:
         conn.close()
+
+
+def test_insert_file_index_multiple() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        file1 = "scc20250512.html.gz"
+        size1 = 30045
+        db.insert_file_index(cursor, file1, size1)
+        file2 = "scc20250513.html.gz"
+        size2 = 32538
+        db.insert_file_index(cursor, file2, size2)
+
+        file_index = db.get_file_index(cursor)
+        assert file_index[file1] == size1
+        assert file_index[file2] == size2
+    finally:
+        conn.close()
