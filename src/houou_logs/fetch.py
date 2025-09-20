@@ -27,6 +27,8 @@ TIMEOUT = (
 
 FILE_INDEX_ENTRY_PATTERN = re.compile(r"file:'([^']+)',size:(\d+)")
 
+HOUOU_ARCHIVE_PREFIX = "scc"
+
 
 def should_fetch(
     last_fetch_time: datetime,
@@ -54,6 +56,14 @@ def fetch_file_index_text(session: requests.Session, url: str) -> str:
 def parse_file_index(response: str) -> dict[str, int]:
     matches = FILE_INDEX_ENTRY_PATTERN.findall(response)
     return {path.split("/", 1)[1]: int(size) for path, size in matches}
+
+
+def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
+    return {
+        name: size
+        for name, size in file_index.items()
+        if name.startswith(HOUOU_ARCHIVE_PREFIX)
+    }
 
 
 # ### 1. 最新7日間から取得する場合
@@ -94,8 +104,8 @@ def parse_file_index(response: str) -> dict[str, int]:
 # - **9-2**: 対局IDリストを INSERT する関数（重複排除は別関数に）
 #
 # ### 10. 追加が完了したらそのファイルの名前とファイルサイズを DB に追記する
-# - **10-1**: ファイルサイズを取得する関数
-# - **10-2**: ファイル名とサイズを DB に INSERT/UPDATE する関数
+# - **10-1**: 対局ID数を取得する関数
+# - **10-2**: ファイル名と対局ID数を DB に INSERT/UPDATE する関数
 def fetch(db_path: str | Path, *, archive: bool) -> int:
     num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:

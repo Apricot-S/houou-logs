@@ -12,6 +12,7 @@ from requests.exceptions import HTTPError
 from houou_logs.fetch import (
     create_session,
     fetch_file_index_text,
+    filter_houou_files,
     parse_file_index,
     should_fetch,
 )
@@ -99,3 +100,17 @@ def test_parse_file_index_2_entries() -> None:
     file_index = parse_file_index(resp)
     expected = {"sca20250101.log.gz": 75399, "sca20250102.log.gz": 71074}
     assert file_index == expected
+
+
+def test_filter_houou_files_empty() -> None:
+    assert filter_houou_files({}) == {}
+
+
+def test_filter_houou_files_contains_no_houou_file() -> None:
+    file_index = {"sca20250101.log.gz": 75399, "sca20250102.log.gz": 71074}
+    assert filter_houou_files(file_index) == {}
+
+
+def test_filter_houou_files_contains_houou_file() -> None:
+    file_index = {"sca20250101.log.gz": 75399, "scc20250101.html.gz": 40758}
+    assert filter_houou_files(file_index) == {"scc20250101.html.gz": 40758}
