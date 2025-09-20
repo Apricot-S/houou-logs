@@ -9,7 +9,11 @@ import pytest
 from requests import Response, Session
 from requests.exceptions import HTTPError
 
-from houou_logs.fetch import fetch_file_index_text, should_fetch
+from houou_logs.fetch import (
+    create_session,
+    fetch_file_index_text,
+    should_fetch,
+)
 
 
 @pytest.mark.parametrize(
@@ -23,6 +27,12 @@ from houou_logs.fetch import fetch_file_index_text, should_fetch
 def test_should_fetch(last_fetch_time: datetime, *, expected: bool) -> None:
     now = datetime(2025, 9, 20, 11, 0, 0, 0, tzinfo=UTC)
     assert should_fetch(last_fetch_time, now=now) == expected
+
+
+def test_create_session() -> None:
+    session = create_session()
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0"  # noqa: E501
+    assert session.headers["User-Agent"] == user_agent
 
 
 def test_fetch_file_index_text_success() -> None:

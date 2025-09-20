@@ -15,6 +15,10 @@ MIN_FETCH_INTERVAL = timedelta(minutes=20)
 URL_LATEST = "https://tenhou.net/sc/raw/list.cgi"
 URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",  # noqa: E501
+}
+
 TIMEOUT = (
     5.0,  # connect timeout
     5.0,  # read timeout
@@ -30,6 +34,12 @@ def should_fetch(
         now = datetime.now(tz=UTC)
 
     return now - last_fetch_time > MIN_FETCH_INTERVAL
+
+
+def create_session() -> requests.Session:
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    return session
 
 
 def fetch_file_index_text(session: requests.Session, url: str) -> str:
