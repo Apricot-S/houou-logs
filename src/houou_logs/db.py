@@ -25,34 +25,41 @@ def open_db(db_path: str | Path) -> sqlite3.Connection:
 
 def setup_table(conn: sqlite3.Connection) -> None:
     with conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS logs (
-                id TEXT PRIMARY KEY,
-                date TEXT NOT NULL,
-                num_players INTEGER NOT NULL CHECK(num_players IN (4, 3)),
-                is_tonpu INTEGER NOT NULL CHECK(is_tonpu IN (0, 1)),
-                is_processed INTEGER NOT NULL CHECK(is_processed IN (0, 1)),
-                was_error INTEGER NOT NULL CHECK(was_error IN (0, 1)),
-                log BLOB
-            ) WITHOUT ROWID;
-            """,
-        )
+        create_logs_table(conn)
+        create_last_fetch_time_table(conn)
 
-        cursor = conn.execute(
-            """
-            SELECT name
-            FROM sqlite_master
-            WHERE type='table'
-                AND name='last_fetch_time';
-            """,
-        )
-        exists = cursor.fetchone() is not None
-        if exists:
-            return
 
-        conn.execute("CREATE TABLE last_fetch_time (time REAL);")
-        conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (0.0,))
+def create_logs_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS logs (
+            id TEXT PRIMARY KEY,
+            date TEXT NOT NULL,
+            num_players INTEGER NOT NULL CHECK(num_players IN (4, 3)),
+            is_tonpu INTEGER NOT NULL CHECK(is_tonpu IN (0, 1)),
+            is_processed INTEGER NOT NULL CHECK(is_processed IN (0, 1)),
+            was_error INTEGER NOT NULL CHECK(was_error IN (0, 1)),
+            log BLOB
+        ) WITHOUT ROWID;
+        """,
+    )
+
+
+def create_last_fetch_time_table(conn: sqlite3.Connection) -> None:
+    cursor = conn.execute(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type='table'
+            AND name='last_fetch_time';
+        """,
+    )
+    exists = cursor.fetchone() is not None
+    if exists:
+        return
+
+    conn.execute("CREATE TABLE last_fetch_time (time REAL);")
+    conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (0.0,))
 
 
 def insert_entries(cursor: sqlite3.Cursor, entries: list[LogEntry]) -> None:
