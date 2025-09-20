@@ -65,6 +65,17 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
     }
 
 
+def exclude_unchanged_files(
+    file_index: dict[str, int],
+    db_records: dict[str, int],
+) -> dict[str, int]:
+    return {
+        name: size
+        for name, size in file_index.items()
+        if db_records.get(name) != size
+    }
+
+
 # ### 1. 最新7日間から取得する場合
 # - **1-1**: 「最新7日間から取得する」かどうかの判定ロジックを関数化
 # - **1-2**: 「最後にアーカイブを取得した時間」を DB から取得する処理を関数化
@@ -122,6 +133,8 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
 
         file_index = parse_file_index(resp)
         file_index = filter_houou_files(file_index)
+
+        _file_index = db.get_file_index(cursor)
 
         if not archive:
             now = datetime.now(UTC)
