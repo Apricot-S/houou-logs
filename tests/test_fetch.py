@@ -72,7 +72,21 @@ def test_parse_file_index_empty() -> None:
     assert file_index == {}
 
 
-def test_parse_file_index_1_entry() -> None:
+def test_parse_file_index_latest_1_entry() -> None:
+    resp = """list([
+
+{file:'sca20250101.log.gz',size:75399}
+
+]);
+
+
+"""
+    file_index = parse_file_index(resp)
+    expected = {"sca20250101.log.gz": 75399}
+    assert file_index == expected
+
+
+def test_parse_file_index_old_1_entry() -> None:
     resp = """list([
 
 {file:'2025/sca20250101.log.gz',size:75399}
@@ -86,7 +100,7 @@ def test_parse_file_index_1_entry() -> None:
     assert file_index == expected
 
 
-def test_parse_file_index_2_entries() -> None:
+def test_parse_file_index_old_2_entries() -> None:
     resp = """list([
 
 {file:'2025/sca20250101.log.gz',size:75399},
