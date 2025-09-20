@@ -127,3 +127,24 @@ def get_last_fetch_time(cursor: sqlite3.Cursor) -> datetime:
     )
     timestamp = cursor.fetchone()[0]
     return datetime.fromtimestamp(timestamp, UTC)
+
+
+def get_file_index(cursor: sqlite3.Cursor) -> dict[str, int]:
+    cursor.execute(
+        """
+        SELECT file, size FROM file_index;
+        """,
+    )
+    return dict(cursor.fetchall())
+
+
+def insert_file_index(cursor: sqlite3.Cursor, file: str, size: int) -> None:
+    cursor.execute(
+        """
+        INSERT INTO file_index (file, size)
+        VALUES (?, ?)
+        ON CONFLICT(file) DO UPDATE SET
+            size=excluded.size;
+        """,
+        (file, size),
+    )

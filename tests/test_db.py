@@ -228,3 +228,52 @@ def test_get_last_fetch_time_2_times_updated() -> None:
         assert last_fetch_time.astimezone(UTC).timestamp() == timestamp
     finally:
         conn.close()
+
+
+def test_get_file_index_empty() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        file_index = db.get_file_index(cursor)
+        assert file_index == {}
+    finally:
+        conn.close()
+
+
+def test_insert_file_index_new() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        file = "scc20250512.html.gz"
+        size = 30045
+        db.insert_file_index(cursor, file, size)
+
+        file_index = db.get_file_index(cursor)
+        assert file_index[file] == size
+    finally:
+        conn.close()
+
+
+def test_insert_file_index_update() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        file = "scc20250512.html.gz"
+        size1 = 30045
+        size2 = 30090
+        db.insert_file_index(cursor, file, size1)
+        db.insert_file_index(cursor, file, size2)
+
+        file_index = db.get_file_index(cursor)
+        assert file_index[file] == size2
+    finally:
+        conn.close()
