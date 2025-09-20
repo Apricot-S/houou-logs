@@ -12,6 +12,7 @@ from requests.exceptions import HTTPError
 from houou_logs.fetch import (
     create_session,
     fetch_file_index_text,
+    parse_file_index,
     should_fetch,
 )
 
@@ -62,3 +63,39 @@ def test_fetch_file_index_text_error() -> None:
 
     with pytest.raises(HTTPError):
         fetch_file_index_text(mock_session, fake_url)
+
+
+def test_parse_file_index_empty() -> None:
+    resp = """list();"""
+    file_index = parse_file_index(resp)
+    assert file_index == {}
+
+
+def test_parse_file_index_1_entry() -> None:
+    resp = """list([
+
+{file:'2025/sca20250101.log.gz',size:75399}
+
+]);
+
+
+"""
+    file_index = parse_file_index(resp)
+    expected = {"sca20250101.log.gz": 75399}
+    assert file_index == expected
+
+
+def test_parse_file_index_2_entries() -> None:
+    resp = """list([
+
+{file:'2025/sca20250101.log.gz',size:75399},
+
+{file:'2025/sca20250102.log.gz',size:71074}
+
+]);
+
+
+"""
+    file_index = parse_file_index(resp)
+    expected = {"sca20250101.log.gz": 75399, "sca20250102.log.gz": 71074}
+    assert file_index == expected

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import re
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +24,8 @@ TIMEOUT = (
     5.0,  # connect timeout
     5.0,  # read timeout
 )
+
+FILE_INDEX_ENTRY_PATTERN = re.compile(r"file:'([^']+)',size:(\d+)")
 
 
 def should_fetch(
@@ -46,6 +49,11 @@ def fetch_file_index_text(session: requests.Session, url: str) -> str:
     res = session.get(url, timeout=TIMEOUT)
     res.raise_for_status()
     return res.text
+
+
+def parse_file_index(response: str) -> dict[str, int]:
+    matches = FILE_INDEX_ENTRY_PATTERN.findall(response)
+    return {path.split("/", 1)[1]: int(size) for path, size in matches}
 
 
 # ### 1. 最新7日間から取得する場合
@@ -100,5 +108,9 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 return -1
 
         index_url = URL_OLD if archive else URL_LATEST
+        with create_session() as session:
+            resp = fetch_file_index_text(session, index_url)
+
+        file_index = parse_file_index(resp)
 
     return num_logs
