@@ -6,9 +6,19 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import requests
+
 from . import db
 
 MIN_FETCH_INTERVAL = timedelta(minutes=20)
+
+URL_LATEST = "https://tenhou.net/sc/raw/list.cgi"
+URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
+
+TIMEOUT = (
+    5.0,  # connect timeout
+    5.0,  # read timeout
+)
 
 
 def should_fetch(
@@ -20,6 +30,12 @@ def should_fetch(
         now = datetime.now(tz=UTC)
 
     return now - last_fetch_time > MIN_FETCH_INTERVAL
+
+
+def fetch_file_index_text(session: requests.Session, url: str) -> str:
+    res = session.get(url, timeout=TIMEOUT)
+    res.raise_for_status()
+    return res.text
 
 
 # ### 1. 最新7日間から取得する場合
@@ -72,5 +88,7 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
             last_fetch_time = db.get_last_fetch_time(cursor)
             if not should_fetch(last_fetch_time):
                 return -1
+
+        index_url = URL_OLD if archive else URL_LATEST
 
     return num_logs
