@@ -97,7 +97,7 @@ def test_parse_file_index_old_1_entry() -> None:
 
 """
     file_index = parse_file_index(resp)
-    expected = {"sca20250101.log.gz": 75399}
+    expected = {"2025/sca20250101.log.gz": 75399}
     assert file_index == expected
 
 
@@ -113,7 +113,10 @@ def test_parse_file_index_old_2_entries() -> None:
 
 """
     file_index = parse_file_index(resp)
-    expected = {"sca20250101.log.gz": 75399, "sca20250102.log.gz": 71074}
+    expected = {
+        "2025/sca20250101.log.gz": 75399,
+        "2025/sca20250102.log.gz": 71074,
+    }
     assert file_index == expected
 
 

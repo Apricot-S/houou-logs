@@ -6,16 +6,18 @@ import re
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from tempfile import TemporaryFile
 
 import requests
 
 from houou_logs import db
-from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX
+from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, extract_log_entries
 
 MIN_FETCH_INTERVAL = timedelta(minutes=20)
 
-URL_LATEST = "https://tenhou.net/sc/raw/list.cgi"
-URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
+INDEX_URL_LATEST = "https://tenhou.net/sc/raw/list.cgi"
+INDEX_URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
+LOG_DOWNLOAD_URL = "https://tenhou.net/sc/raw/dat/"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",  # noqa: E501
@@ -26,7 +28,7 @@ TIMEOUT = (
     5.0,  # read timeout
 )
 
-FILE_INDEX_ENTRY_PATTERN = re.compile(r"file:'(?:\d{4}/)?([^']+)',size:(\d+)")
+FILE_INDEX_ENTRY_PATTERN = re.compile(r"file:'([^']+)',size:(\d+)")
 
 
 def should_fetch(
@@ -127,15 +129,23 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
             if not should_fetch(last_fetch_time):
                 return -1
 
-        index_url = URL_OLD if archive else URL_LATEST
+        index_url = INDEX_URL_OLD if archive else INDEX_URL_LATEST
         with create_session() as session:
             resp = fetch_file_index_text(session, index_url)
 
-        file_index = parse_file_index(resp)
-        file_index = filter_houou_files(file_index)
+            file_index = parse_file_index(resp)
+            file_index = filter_houou_files(file_index)
 
-        db_records = db.get_file_index(cursor)
-        changed_files = exclude_unchanged_files(file_index, db_records)
+            db_records = db.get_file_index(cursor)
+            changed_files = exclude_unchanged_files(file_index, db_records)
+
+            for filename in changed_files:
+                url = f"{LOG_DOWNLOAD_URL}{filename}"
+                page = session.get(url, timeout=TIMEOUT)
+
+                with TemporaryFile("w+b") as f:
+                    f.write(page.content)
+                    entries = extract_log_entries(filename, f)
 
         if not archive:
             now = datetime.now(UTC)
