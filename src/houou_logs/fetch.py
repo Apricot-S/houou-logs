@@ -63,7 +63,7 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
     return {
         name: size
         for name, size in file_index.items()
-        if name.startswith(HOUOU_ARCHIVE_PREFIX)
+        if HOUOU_ARCHIVE_PREFIX in name
     }
 
 
@@ -139,13 +139,17 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
             db_records = db.get_file_index(cursor)
             changed_files = exclude_unchanged_files(file_index, db_records)
 
-            for filename in changed_files:
+            for filename, size in changed_files.items():
                 url = f"{LOG_DOWNLOAD_URL}{filename}"
                 page = session.get(url, timeout=TIMEOUT)
 
                 with TemporaryFile("w+b") as f:
                     f.write(page.content)
                     entries = extract_log_entries(filename, f)
+
+                num_logs += len(entries)
+                db.insert_log_entries(cursor, entries)
+                db.insert_file_index(cursor, filename, size)
 
         if not archive:
             now = datetime.now(UTC)

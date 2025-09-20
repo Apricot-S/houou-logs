@@ -134,6 +134,16 @@ def test_filter_houou_files_contains_houou_file() -> None:
     assert filter_houou_files(file_index) == {"scc20250101.html.gz": 40758}
 
 
+def test_filter_houou_files_contains_old_houou_file() -> None:
+    file_index = {
+        "2025/sca20250101.log.gz": 75399,
+        "2025/scc20250101.html.gz": 40758,
+    }
+    assert filter_houou_files(file_index) == {
+        "2025/scc20250101.html.gz": 40758,
+    }
+
+
 def test_exclude_unchanged_files_excludes_unchanged_file() -> None:
     file_index = {"sca20250101.log.gz": 75399, "scc20250101.html.gz": 40759}
     db_records = {"sca20250101.log.gz": 75399, "scc20250101.html.gz": 40758}
