@@ -74,7 +74,10 @@ def create_file_index_table(conn: sqlite3.Connection) -> None:
     )
 
 
-def insert_entries(cursor: sqlite3.Cursor, entries: list[LogEntry]) -> None:
+def insert_log_entries(
+    cursor: sqlite3.Cursor,
+    entries: list[LogEntry],
+) -> None:
     if not entries:
         return
 

@@ -93,7 +93,7 @@ def test_setup_table_creates_file_index_table() -> None:
         conn.close()
 
 
-def test_insert_entries() -> None:
+def test_insert_log_entries() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -121,7 +121,7 @@ def test_insert_entries() -> None:
             ),
         ]
 
-        db.insert_entries(cursor, entries)
+        db.insert_log_entries(cursor, entries)
         conn.commit()
 
         cursor.execute("SELECT * FROM logs;")
