@@ -102,3 +102,13 @@ def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
         """,
         (time.astimezone(UTC).timestamp(),),
     )
+
+
+def get_last_fetch_time(cursor: sqlite3.Cursor) -> datetime:
+    cursor.execute(
+        """
+        SELECT time FROM last_fetch_time;
+        """,
+    )
+    timestamp = cursor.fetchone()[0]
+    return datetime.fromtimestamp(timestamp, UTC)

@@ -174,3 +174,36 @@ def test_update_last_fetch_time_has_only_last_time() -> None:
         assert rows[0][0] == timestamp
     finally:
         conn.close()
+
+
+def test_get_last_fetch_time_never_fetched() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+        last_fetch_time = db.get_last_fetch_time(cursor)
+        assert last_fetch_time.astimezone(UTC).timestamp() == 0.0
+    finally:
+        conn.close()
+
+
+def test_get_last_fetch_time_2_times_updated() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+        zone_info = ZoneInfo("Asia/Tokyo")
+        time1 = datetime(2025, 9, 20, 10, 30, 40, 500, tzinfo=zone_info)
+        time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
+        timestamp = time2.astimezone(UTC).timestamp()
+
+        db.update_last_fetch_time(cursor, time1)
+        db.update_last_fetch_time(cursor, time2)
+        conn.commit()
+
+        last_fetch_time = db.get_last_fetch_time(cursor)
+        assert last_fetch_time.astimezone(UTC).timestamp() == timestamp
+    finally:
+        conn.close()
