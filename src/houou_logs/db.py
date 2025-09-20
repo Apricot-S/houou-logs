@@ -27,6 +27,7 @@ def setup_table(conn: sqlite3.Connection) -> None:
     with conn:
         create_logs_table(conn)
         create_last_fetch_time_table(conn)
+        create_file_index_table(conn)
 
 
 def create_logs_table(conn: sqlite3.Connection) -> None:
@@ -60,6 +61,17 @@ def create_last_fetch_time_table(conn: sqlite3.Connection) -> None:
 
     conn.execute("CREATE TABLE last_fetch_time (time REAL);")
     conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (0.0,))
+
+
+def create_file_index_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS file_index (
+            file TEXT PRIMARY KEY,
+            size INTEGER NOT NULL CHECK(size > 0)
+        ) WITHOUT ROWID;
+        """,
+    )
 
 
 def insert_entries(cursor: sqlite3.Cursor, entries: list[LogEntry]) -> None:

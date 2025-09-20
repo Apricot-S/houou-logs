@@ -72,6 +72,27 @@ def test_setup_table_creates_last_fetch_time_table() -> None:
         conn.close()
 
 
+def test_setup_table_creates_file_index_table() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+
+        cursor = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+                AND name='file_index';
+            """,
+        )
+        table = cursor.fetchone()
+        assert table is not None
+        assert table[0] == "file_index"
+    finally:
+        conn.close()
+
+
 def test_insert_entries() -> None:
     conn = db.open_db(":memory:")
 
