@@ -121,5 +121,6 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
             resp = fetch_file_index_text(session, index_url)
 
         file_index = parse_file_index(resp)
+        file_index = filter_houou_files(file_index)
 
     return num_logs
