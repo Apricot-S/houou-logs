@@ -51,10 +51,11 @@ def set_fetch_args(parser: ArgumentParser) -> ArgumentParser:
 
 def fetch_cli(args: Namespace) -> None:
     num_logs = fetch.fetch(args.db_path, archive=args.archive)
-    print(
-        f"Number of log entries targeted for DB insertion: {num_logs}",
-        file=sys.stderr,
-    )
+    if num_logs == -1:
+        msg = "Skipping fetch: last fetch was within 20 minutes."
+    else:
+        msg = f"Number of log entries targeted for DB insertion: {num_logs}"
+    print(msg, file=sys.stderr)
 
 
 def main() -> None:
