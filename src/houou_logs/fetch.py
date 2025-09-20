@@ -134,7 +134,8 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
         file_index = parse_file_index(resp)
         file_index = filter_houou_files(file_index)
 
-        _file_index = db.get_file_index(cursor)
+        db_records = db.get_file_index(cursor)
+        changed_files = exclude_unchanged_files(file_index, db_records)
 
         if not archive:
             now = datetime.now(UTC)
