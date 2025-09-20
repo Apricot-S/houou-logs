@@ -42,7 +42,8 @@ def import_(db_path: str | Path, archive_path: Path) -> int:
             for info in iter_houou_archive_files(zf):
                 with zf.open(info) as f:
                     entries = extract_log_entries(info.filename, f)
-                    num_logs += len(entries)
+
+                num_logs += len(entries)
                 db.insert_log_entries(cursor, entries)
 
     return num_logs
