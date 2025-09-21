@@ -26,7 +26,7 @@ houou-logs import <db-path> <archive-path>
 
 Example:
 
-The following example imports log IDs for the year 2009.
+Import log IDs for the year 2009.
 
 1. Download the archive file manually: `https://tenhou.net/sc/raw/scraw2009.zip`
 2. Place the file in the current working directory.
@@ -44,11 +44,12 @@ This command skips log files that are already fetched and have the same size, an
 
 #### Fetch log IDs from the latest 7 days (default mode)
 
+> [!NOTE]
+> In this mode, if executed again within 20 minutes from the last run, the process will be cancelled because there are no updates.
+
 ```sh
 houou-logs fetch <db-path>
 ```
-
-In this mode, if executed again within 20 minutes from the last run, the process will be cancelled because there are no updates.
 
 Example:
 
@@ -71,7 +72,7 @@ houou-logs fetch db/latest.db --archive
 ### Fetch yakuman log IDs
 
 > [!NOTE]
-> Yakuman logs are available starting from 2006-10.
+> Yakuman logs are available starting from October 2006.
 
 ```sh
 houou-logs yakuman <db-path> [--year <n>] [--month <n>]
