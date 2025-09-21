@@ -21,7 +21,7 @@ Import a list of log IDs into the database.
 houou-logs import <db-path> <archive-path>
 ```
 
-#### Example
+Example:
 
 The following example imports log IDs for the year 2009.
 
@@ -38,8 +38,14 @@ houou-logs import db/2009.db scraw2009.zip
 
 ### Fetch latest log IDs
 
+Fetch a list of log IDs into the database.
+
+This command skips log files that are already fetched and have the same size, and only adds new log IDs to the database.
+
+#### Fetch log IDs from the latest 7 days (default mode)
+
 ```sh
-houou-logs fetch <db-path> [--archive]
+houou-logs fetch <db-path>
 ```
 
 Example:
@@ -47,6 +53,16 @@ Example:
 ```sh
 houou-logs fetch db/latest.db
 ```
+
+In this mode, if executed again within 20 minutes from the last run, the process will be cancelled because there are no updates.
+
+#### Fetch log IDs from January 1 of the current year until 7 days before the current day (archive mode)
+
+```sh
+houou-logs fetch <db-path> --archive
+```
+
+Example:
 
 ```sh
 houou-logs fetch db/latest.db --archive
