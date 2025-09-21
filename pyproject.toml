@@ -9,6 +9,7 @@ license = "MIT"
 license-files = ["LICENSE", "THIRD-PARTY-NOTICES.md"]
 readme = "README.md"
 requires-python = ">= 3.12"
+keywords = ["mahjong", "tenhou"]
 classifiers = [
     "Private :: Do Not Upload",
     "Programming Language :: Python :: 3 :: Only",
