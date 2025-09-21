@@ -79,13 +79,13 @@ Fetch log IDs where a yakuman occurred for a specific year and month.
 > Yakuman logs include all tables (four-player only), not just the Houou (Phoenix) table.
 
 ```sh
-houou-logs yakuman <db-path> [--year <n>] [--month <n>]
+houou-logs yakuman <db-path> <year> <month>
 ```
 
 Example:
 
 ```sh
-houou-logs yakuman db/yakuman/2006/10.db --year 2006 --month 10
+houou-logs yakuman db/yakuman/2007/01.db 2007 01
 ```
 
 ### Download log contents
