@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import io
 import re
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from tempfile import TemporaryFile
 
 import requests
 
@@ -103,9 +103,7 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 url = f"{LOG_DOWNLOAD_URL}{filename}"
                 page = session.get(url, timeout=TIMEOUT)
 
-                with TemporaryFile("w+b") as f:
-                    f.write(page.content)
-                    f.seek(0)
+                with io.BytesIO(page.content) as f:
                     entries = extract_log_entries(filename, f)
 
                 num_logs += len(entries)
