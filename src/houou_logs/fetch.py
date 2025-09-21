@@ -110,6 +110,8 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 db.insert_log_entries(cursor, entries)
                 db.insert_file_index(cursor, filename, size)
 
+                conn.commit()
+
         if not archive:
             now = datetime.now(UTC)
             db.update_last_fetch_time(cursor, now)
