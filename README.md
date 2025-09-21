@@ -17,6 +17,9 @@ houou-logs$ uv tool install .
 
 Import a list of log IDs into the database.
 
+> [!NOTE]
+> Houou (Phoenix) games are available starting from 2009.
+
 ```sh
 houou-logs import <db-path> <archive-path>
 ```
@@ -24,9 +27,6 @@ houou-logs import <db-path> <archive-path>
 Example:
 
 The following example imports log IDs for the year 2009.
-
-> [!NOTE]
-> Houou (Phoenix) games are available starting from 2009.
 
 1. Download the archive file manually: `https://tenhou.net/sc/raw/scraw2009.zip`
 2. Place the file in the current working directory.
@@ -48,13 +48,13 @@ This command skips log files that are already fetched and have the same size, an
 houou-logs fetch <db-path>
 ```
 
+In this mode, if executed again within 20 minutes from the last run, the process will be cancelled because there are no updates.
+
 Example:
 
 ```sh
 houou-logs fetch db/latest.db
 ```
-
-In this mode, if executed again within 20 minutes from the last run, the process will be cancelled because there are no updates.
 
 #### Fetch log IDs from January 1 of the current year until 7 days before the current day (archive mode)
 
@@ -69,6 +69,9 @@ houou-logs fetch db/latest.db --archive
 ```
 
 ### Fetch yakuman log IDs
+
+> [!NOTE]
+> Yakuman logs are available starting from 2006-10.
 
 ```sh
 houou-logs yakuman <db-path> [--year <n>] [--month <n>]
