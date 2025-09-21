@@ -88,16 +88,16 @@ Example:
 houou-logs yakuman db/yakuman/2006/10.db --year 2006 --month 10
 ```
 
-### Fetch log contents
+### Download log contents
 
 ```sh
-houou-logs fetch-logs <db-path> [--limit <n>]
+houou-logs download <db-path> [--limit <n>]
 ```
 
 Example:
 
 ```sh
-houou-logs fetch-logs db/2024.db --limit 50
+houou-logs download db/2024.db --limit 50
 ```
 
 ### Validate that fetched logs can be parsed
