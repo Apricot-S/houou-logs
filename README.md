@@ -91,16 +91,16 @@ houou-logs yakuman db/yakuman/2007/01.db 2007 01
 ### Download log contents
 
 ```sh
-houou-logs download <db-path> [--limit <n>]
+houou-logs download <db-path> [--players <4 or 3>] [--length <t or h>] [--limit <n>]
 ```
 
 Example:
 
 ```sh
-houou-logs download db/2024.db --limit 50
+houou-logs download db/2024.db --players 3 --length h --limit 50
 ```
 
-### Validate that fetched logs can be parsed
+### Validate that downloaded logs can be parsed
 
 ```sh
 houou-logs validate <db-path>
@@ -121,7 +121,7 @@ houou-logs export <db-path> <output-dir> [--players <4 or 3>] [--length <t or h>
 Example:
 
 ```sh
-houou-logs export db/2024.db xml/2024/4p/hanchan --players 4 --length h --limit 100 --offset 50
+houou-logs export db/2024.db xml/2024/4p/hanchan --players 4 --length t --limit 100 --offset 50
 ```
 
 ## Credits
