@@ -1,6 +1,6 @@
 # houou-logs
 
-Tools to download houou (phoenix) logs from tenhou.net
+Tools to download Houou (Phoenix) logs from tenhou.net
 
 ## Installation
 
@@ -71,8 +71,12 @@ houou-logs fetch db/latest.db --archive
 
 ### Fetch yakuman log IDs
 
+Fetch log IDs where a yakuman occurred for a specific year and month.
+
 > [!NOTE]
-> Yakuman logs are available starting from October 2006.
+> Yakuman logs are available starting from October 2006.  
+> Only four-player game logs are available. Three-player games are not included.  
+> Yakuman logs include all tables (four-player only), not just the Houou (Phoenix) table.
 
 ```sh
 houou-logs yakuman <db-path> [--year <n>] [--month <n>]
