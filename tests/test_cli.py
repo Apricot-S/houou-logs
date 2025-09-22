@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 from argparse import ArgumentParser, Namespace
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -103,3 +104,24 @@ def test_yakuman_cli_calls_yakuman_for_current_month(
     args = Namespace(db_path=Path("db.sqlite"), year=2025, month=9)
     yakuman_cli(args)
     mock_yakuman.assert_called_once_with(Path("db.sqlite"), 2025, 9, now)
+
+
+@pytest.fixture
+def mock_yakuman() -> Iterator:
+    with patch("houou_logs.yakuman.yakuman") as m:
+        yield m
+
+
+@patch("houou_logs.cli.datetime")
+@pytest.mark.usefixtures("mock_yakuman")
+def test_yakuman_cli_warns_yakuman_for_current_month(
+    mock_datetime: Mock,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    now = datetime(2025, 9, 23, 1, 52, 12, 0, UTC)
+    mock_datetime.now.return_value = now
+    mock_datetime.side_effect = lambda *a, **kw: datetime(*a, **kw)  # noqa: DTZ001
+    args = Namespace(db_path=Path("db.sqlite"), year=2025, month=9)
+    yakuman_cli(args)
+    captured = capsys.readouterr()
+    assert "Warning: This month is not finished yet." in captured.err
