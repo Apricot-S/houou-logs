@@ -41,7 +41,7 @@ def import_(db_path: str | Path, archive_path: Path) -> int:
         cursor = conn.cursor()
 
         with ZipFile(archive_path) as zf:
-            for info in tqdm(iter_houou_archive_files(zf)):
+            for info in tqdm(list(iter_houou_archive_files(zf))):
                 with zf.open(info) as f:
                     entries = extract_log_entries(info.filename, f)
 
