@@ -94,12 +94,12 @@ def test_set_yakuman_args_13_month() -> None:
 
 @patch("houou_logs.cli.datetime")
 @patch("houou_logs.yakuman.yakuman")
-def test_yakuman_cli_calls_yakuman(
+def test_yakuman_cli_calls_yakuman_for_current_month(
     mock_yakuman: Mock,
     mock_datetime: Mock,
 ) -> None:
     now = datetime(2025, 9, 23, 1, 52, 12, 0, UTC)
     mock_datetime.now.return_value = now
-    args = Namespace(db_path=Path("db.sqlite"), year=2006, month=10)
+    args = Namespace(db_path=Path("db.sqlite"), year=2025, month=9)
     yakuman_cli(args)
-    mock_yakuman.assert_called_once_with(Path("db.sqlite"), 2006, 10, now)
+    mock_yakuman.assert_called_once_with(Path("db.sqlite"), 2025, 9, now)
