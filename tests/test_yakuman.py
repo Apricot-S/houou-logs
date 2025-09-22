@@ -9,6 +9,7 @@ import pytest
 
 from houou_logs.yakuman import (
     UserInputError,
+    build_url,
     validate_yakuman_log_date,
 )
 
@@ -45,3 +46,7 @@ def test_validate_yakuman_log_date_future_date() -> None:
 def test_validate_yakuman_log_date_current_month() -> None:
     fixed_now = datetime(2025, 9, 15, tzinfo=UTC)
     validate_yakuman_log_date(2025, 9, fixed_now)
+
+
+def test_build_url() -> None:
+    assert build_url(2025, 1) == "https://tenhou.net/sc/2025/01/ykm.js"

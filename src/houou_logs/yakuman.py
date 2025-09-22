@@ -33,7 +33,7 @@ def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
 
 
 def build_url(year: int, month: int) -> str:
-    return f"https://tenhou.net/sc/{year}/{month}/ykm.js"
+    return f"https://tenhou.net/sc/{year}/{month:02}/ykm.js"
 
 
 def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
