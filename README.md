@@ -121,7 +121,7 @@ houou-logs export <db-path> <output-dir> [--players <4 or 3>] [--length <t or h>
 Example:
 
 ```sh
-houou-logs export db/2024.db xml/2024/4p/hanchan --players 4 --length t --limit 100 --offset 50
+houou-logs export db/2024.db xml/2024/4p/tonpu --players 4 --length t --limit 100 --offset 50
 ```
 
 ## Credits
