@@ -89,7 +89,7 @@ def yakuman_cli(args: Namespace) -> None:
 
 def main() -> None:
     parser = ArgumentParser()
-    subparsers = parser.add_subparsers(required=True)
+    subparsers = parser.add_subparsers()
 
     parser_import = subparsers.add_parser("import")
     parser_import = set_import_args(parser_import)
@@ -104,7 +104,10 @@ def main() -> None:
     parser_yakuman.set_defaults(func=yakuman_cli)
 
     args = parser.parse_args()
-    args.func(args)
+    if hasattr(args, "func"):
+        args.func(args)
+    else:
+        parser.print_help()
 
 
 if __name__ == "__main__":
