@@ -75,7 +75,6 @@ def set_yakuman_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "month",
         type=int,
-        choices=range(1, 13),
         help="Month to fetch for yakuman logs (1-12).",
     )
     return parser
