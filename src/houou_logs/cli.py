@@ -58,6 +58,14 @@ def fetch_cli(args: Namespace) -> None:
     print(msg, file=sys.stderr)
 
 
+def set_yakuman_args(parser: ArgumentParser) -> ArgumentParser:
+    raise NotImplementedError
+
+
+def yakuman_cli(args: Namespace) -> None:
+    pass
+
+
 def main() -> None:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -69,6 +77,10 @@ def main() -> None:
     parser_fetch = subparsers.add_parser("fetch")
     parser_fetch = set_fetch_args(parser_fetch)
     parser_fetch.set_defaults(func=fetch_cli)
+
+    parser_yakuman = subparsers.add_parser("yakuman")
+    parser_yakuman = set_yakuman_args(parser_yakuman)
+    parser_yakuman.set_defaults(func=yakuman_cli)
 
     args = parser.parse_args()
     args.func(args)

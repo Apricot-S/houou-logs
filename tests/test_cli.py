@@ -13,6 +13,7 @@ from houou_logs.cli import (
     import_cli,
     set_fetch_args,
     set_import_args,
+    set_yakuman_args,
 )
 
 
