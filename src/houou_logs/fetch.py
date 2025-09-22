@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import requests
+from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, extract_log_entries
@@ -99,7 +100,7 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
             db_records = db.get_file_index(cursor)
             changed_files = exclude_unchanged_files(file_index, db_records)
 
-            for filename, size in changed_files.items():
+            for filename, size in tqdm(changed_files.items()):
                 url = f"{LOG_DOWNLOAD_URL}{filename}"
                 page = session.get(url, timeout=TIMEOUT)
 
