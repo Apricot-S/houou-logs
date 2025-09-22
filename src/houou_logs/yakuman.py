@@ -2,10 +2,16 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
+from requests import Session
+
+from houou_logs import db
 from houou_logs.exceptions import UserInputError
+from houou_logs.fetch import TIMEOUT, create_session
+from houou_logs.log_id import parse_id
 
 YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
 
@@ -26,6 +32,36 @@ def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
         raise UserInputError(msg)
 
 
+def build_url(year: int, month: int) -> str:
+    return f"https://tenhou.net/sc/{year}/{month}/ykm.js"
+
+
+def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
+    res = session.get(url, timeout=TIMEOUT)
+    res.raise_for_status()
+    return res.text
+
+
+def extract_ids(text: str) -> list[str]:
+    raise NotImplementedError
+
+
 def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
     validate_yakuman_log_date(year, month, now)
-    return 0
+
+    num_logs = 0
+    with closing(db.open_db(db_path)) as conn, conn:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        with create_session() as session:
+            url = build_url(year, month)
+            resp = fetch_yakuman_log_ids_text(session, url)
+
+            ids = extract_ids(resp)
+            entries = [parse_id(i) for i in ids]
+
+            num_logs += len(entries)
+            db.insert_log_entries(cursor, entries)
+
+    return num_logs
