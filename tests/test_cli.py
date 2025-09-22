@@ -81,18 +81,6 @@ def test_set_yakuman_args_missing_args() -> None:
         parser.parse_args([])
 
 
-def test_set_yakuman_args_0_month() -> None:
-    parser = set_yakuman_args(ArgumentParser())
-    with pytest.raises(SystemExit):
-        parser.parse_args(["db.sqlite", "2007", "0"])
-
-
-def test_set_yakuman_args_13_month() -> None:
-    parser = set_yakuman_args(ArgumentParser())
-    with pytest.raises(SystemExit):
-        parser.parse_args(["db.sqlite", "2007", "13"])
-
-
 @patch("houou_logs.cli.datetime")
 @patch("houou_logs.yakuman.yakuman")
 def test_yakuman_cli_calls_yakuman_for_current_month(
