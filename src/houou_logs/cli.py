@@ -4,6 +4,7 @@
 
 import sys
 from argparse import ArgumentParser, Namespace
+from datetime import UTC, datetime
 from pathlib import Path
 
 from houou_logs import fetch, import_, yakuman
@@ -79,8 +80,17 @@ def set_yakuman_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
-def yakuman_cli(args: Namespace) -> None:
-    num_logs = yakuman.yakuman(args.db_path, args.year, args.month)
+def yakuman_cli(args: Namespace, now: datetime | None = None) -> None:
+    if now is None:
+        now = datetime.now(UTC)
+
+    if args.year == now.year and args.month == now.month:
+        print(
+            "Warning: This month is not finished yet. More logs may appear later.",  # noqa: E501
+            file=sys.stderr,
+        )
+
+    num_logs = yakuman.yakuman(args.db_path, args.year, args.month, now)
     print(
         f"Number of log entries targeted for DB insertion: {num_logs}",
         file=sys.stderr,
