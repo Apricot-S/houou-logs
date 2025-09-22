@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 from argparse import ArgumentParser, Namespace
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -91,8 +92,14 @@ def test_set_yakuman_args_13_month() -> None:
         parser.parse_args(["db.sqlite", "2007", "13"])
 
 
+@patch("houou_logs.cli.datetime")
 @patch("houou_logs.yakuman.yakuman")
-def test_yakuman_cli_calls_yakuman(mock_yakuman: Mock) -> None:
+def test_yakuman_cli_calls_yakuman(
+    mock_yakuman: Mock,
+    mock_datetime: Mock,
+) -> None:
+    now = datetime(2025, 9, 23, 1, 52, 12, 0, UTC)
+    mock_datetime.now.return_value = now
     args = Namespace(db_path=Path("db.sqlite"), year=2006, month=10)
     yakuman_cli(args)
-    mock_yakuman.assert_called_once_with(Path("db.sqlite"), 2006, 10)
+    mock_yakuman.assert_called_once_with(Path("db.sqlite"), 2006, 10, now)
