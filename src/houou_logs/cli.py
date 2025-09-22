@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from houou_logs import fetch, import_, yakuman
+from houou_logs.exceptions import UserInputError
 
 
 def set_import_args(parser: ArgumentParser) -> ArgumentParser:
@@ -114,10 +115,16 @@ def main() -> None:
     parser_yakuman.set_defaults(func=yakuman_cli)
 
     args = parser.parse_args()
-    if hasattr(args, "func"):
-        args.func(args)
-    else:
+
+    if not hasattr(args, "func"):
         parser.print_help()
+        return
+
+    try:
+        args.func(args)
+    except UserInputError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

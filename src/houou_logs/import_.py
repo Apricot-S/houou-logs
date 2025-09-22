@@ -10,17 +10,18 @@ from zipfile import ZipFile, ZipInfo, is_zipfile
 from tqdm import tqdm
 
 from houou_logs import db
+from houou_logs.exceptions import UserInputError
 from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, extract_log_entries
 
 
 def validate_archive(archive_path: Path) -> None:
     if not archive_path.is_file():
         msg = f"archive file not found: {archive_path}"
-        raise FileNotFoundError(msg)
+        raise UserInputError(msg)
 
     if not is_zipfile(archive_path):
         msg = f"archive file must be zip file: {archive_path}"
-        raise ValueError(msg)
+        raise UserInputError(msg)
 
 
 def iter_houou_archive_files(zf: ZipFile) -> Iterator[ZipInfo]:

@@ -8,19 +8,20 @@ from zipfile import ZipFile, ZipInfo
 
 import pytest
 
+from houou_logs.exceptions import UserInputError
 from houou_logs.import_ import iter_houou_archive_files, validate_archive
 
 
 def test_validate_archive_raises_if_file_not_found() -> None:
     path = Path("missing.zip")
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(UserInputError):
         validate_archive(path)
 
 
 def test_validate_archive_raises_if_not_zipfile(tmp_path: Path) -> None:
     fake_file = tmp_path / "not_zip.txt"
     fake_file.write_text("not a zip")
-    with pytest.raises(ValueError, match="archive file must be zip file"):
+    with pytest.raises(UserInputError):
         validate_archive(fake_file)
 
 
