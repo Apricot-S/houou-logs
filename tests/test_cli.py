@@ -44,7 +44,7 @@ def test_set_fetch_args_latest() -> None:
     assert not args.archive
 
 
-def test_set_fetch_args_latest_archive() -> None:
+def test_set_fetch_args_archive() -> None:
     parser = set_fetch_args(ArgumentParser())
     args = parser.parse_args(["db.sqlite", "--archive"])
     assert args.db_path == Path("db.sqlite")
