@@ -62,3 +62,29 @@ def test_fetch_cli_calls_fetch(mock_fetch: Mock) -> None:
     args = Namespace(db_path=Path("db.sqlite"), archive=True)
     fetch_cli(args)
     mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=True)
+
+
+def test_set_yakuman_args() -> None:
+    parser = set_yakuman_args(ArgumentParser())
+    args = parser.parse_args(["db.sqlite", "2007", "01"])
+    assert args.db_path == Path("db.sqlite")
+    assert args.year == 2007
+    assert args.month == 1
+
+
+def test_set_yakuman_args_missing_args() -> None:
+    parser = set_yakuman_args(ArgumentParser())
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
+
+
+def test_set_yakuman_args_0_month() -> None:
+    parser = set_yakuman_args(ArgumentParser())
+    with pytest.raises(SystemExit):
+        parser.parse_args(["db.sqlite", "2007", "0"])
+
+
+def test_set_yakuman_args_13_month() -> None:
+    parser = set_yakuman_args(ArgumentParser())
+    with pytest.raises(SystemExit):
+        parser.parse_args(["db.sqlite", "2007", "13"])

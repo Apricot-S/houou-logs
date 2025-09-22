@@ -59,7 +59,24 @@ def fetch_cli(args: Namespace) -> None:
 
 
 def set_yakuman_args(parser: ArgumentParser) -> ArgumentParser:
-    raise NotImplementedError
+    parser.add_argument(
+        "db_path",
+        type=Path,
+        help="Path to the SQLite database file.",
+        metavar="db-path",
+    )
+    parser.add_argument(
+        "year",
+        type=int,
+        help="Year to fetch for yakuman logs (e.g., 2006).",
+    )
+    parser.add_argument(
+        "month",
+        type=int,
+        choices=range(1, 13),
+        help="Month to fetch for yakuman logs (1-12).",
+    )
+    return parser
 
 
 def yakuman_cli(args: Namespace) -> None:
