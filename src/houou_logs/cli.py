@@ -6,7 +6,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
-from houou_logs import fetch, import_
+from houou_logs import fetch, import_, yakuman
 
 
 def set_import_args(parser: ArgumentParser) -> ArgumentParser:
@@ -80,7 +80,11 @@ def set_yakuman_args(parser: ArgumentParser) -> ArgumentParser:
 
 
 def yakuman_cli(args: Namespace) -> None:
-    pass
+    num_logs = yakuman.yakuman(args.db_path, args.year, args.month)
+    print(
+        f"Number of log entries targeted for DB insertion: {num_logs}",
+        file=sys.stderr,
+    )
 
 
 def main() -> None:

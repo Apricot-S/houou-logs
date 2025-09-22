@@ -14,6 +14,7 @@ from houou_logs.cli import (
     set_fetch_args,
     set_import_args,
     set_yakuman_args,
+    yakuman_cli,
 )
 
 
@@ -88,3 +89,10 @@ def test_set_yakuman_args_13_month() -> None:
     parser = set_yakuman_args(ArgumentParser())
     with pytest.raises(SystemExit):
         parser.parse_args(["db.sqlite", "2007", "13"])
+
+
+@patch("houou_logs.yakuman.yakuman")
+def test_yakuman_cli_calls_yakuman(mock_yakuman: Mock) -> None:
+    args = Namespace(db_path=Path("db.sqlite"), year=2006, month=10)
+    yakuman_cli(args)
+    mock_yakuman.assert_called_once_with(Path("db.sqlite"), 2006, 10)
