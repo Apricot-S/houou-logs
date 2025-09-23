@@ -116,10 +116,21 @@ def test_yakuman_cli_warns_yakuman_for_current_month(
     assert "Warning: This month is not finished yet." in captured.err
 
 
-def test_set_download_args_with_no_options() -> None:
+def test_set_download_args_without_options() -> None:
     parser = set_download_args(ArgumentParser())
     args = parser.parse_args(["db.sqlite"])
     assert args.db_path == Path("db.sqlite")
     assert args.players is None
     assert args.length is None
     assert args.limit is None
+
+
+def test_set_download_args_with_options() -> None:
+    parser = set_download_args(ArgumentParser())
+    args = parser.parse_args(
+        ["db.sqlite", "-p", "4", "-l", "t", "--limit", "50"],
+    )
+    assert args.db_path == Path("db.sqlite")
+    assert args.players == 4
+    assert args.length == "t"
+    assert args.limit == 50
