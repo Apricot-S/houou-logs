@@ -15,6 +15,7 @@ from houou_logs.cli import (
     fetch_cli,
     import_cli,
     set_download_args,
+    set_export_args,
     set_fetch_args,
     set_import_args,
     set_yakuman_args,
@@ -142,3 +143,38 @@ def test_download_cli_calls_download(mock_download: Mock) -> None:
     args = Namespace(db_path=Path("db.sqlite"), players=4, length="h", limit=1)
     download_cli(args)
     mock_download.assert_called_once_with(Path("db.sqlite"), 4, "h", 1)
+
+
+def test_set_export_args_without_options() -> None:
+    parser = set_export_args(ArgumentParser())
+    args = parser.parse_args(["db.sqlite", "xml/"])
+    assert args.db_path == Path("db.sqlite")
+    assert args.output_dir == Path("xml")
+    assert args.players is None
+    assert args.length is None
+    assert args.limit is None
+    assert args.offset == 0
+
+
+def test_set_export_args_with_options() -> None:
+    parser = set_export_args(ArgumentParser())
+    args = parser.parse_args(
+        [
+            "db.sqlite",
+            "xml/",
+            "-p",
+            "4",
+            "-l",
+            "t",
+            "--limit",
+            "50",
+            "--offset",
+            "10",
+        ],
+    )
+    assert args.db_path == Path("db.sqlite")
+    assert args.output_dir == Path("xml")
+    assert args.players == 4
+    assert args.length == "t"
+    assert args.limit == 50
+    assert args.offset == 10

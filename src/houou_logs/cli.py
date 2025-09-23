@@ -134,6 +134,45 @@ def download_cli(args: Namespace) -> None:
     print(f"Number of logs download: {num_logs}", file=sys.stderr)
 
 
+def set_export_args(parser: ArgumentParser) -> ArgumentParser:
+    parser.add_argument(
+        "db_path",
+        type=Path,
+        help="Path to the SQLite database file.",
+        metavar="db-path",
+    )
+    parser.add_argument(
+        "output_dir",
+        type=Path,
+        help="Path to the directory where the log contents will be exported. The directory will be created if it does not exist.",  # noqa: E501
+        metavar="output-dir",
+    )
+    parser.add_argument(
+        "-p",
+        "--players",
+        type=int,
+        help="Number of players. If omitted, both are included.",
+    )
+    parser.add_argument(
+        "-l",
+        "--length",
+        type=str,
+        help="Game length: 't' for tonpu (East Only), 'h' for hanchan (Two-Wind Match). If omitted, both are included.",  # noqa: E501
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Max number of logs to export. If omitted, all available logs are exported.",  # noqa: E501
+    )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        help="Number of logs to skip before starting export. Default is 0.",
+        default=0,
+    )
+    return parser
+
+
 def main() -> None:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -153,6 +192,9 @@ def main() -> None:
     parser_download = subparsers.add_parser("download")
     parser_download = set_download_args(parser_download)
     parser_download.set_defaults(func=download_cli)
+
+    parser_export = subparsers.add_parser("export")
+    parser_export = set_export_args(parser_export)
 
     args = parser.parse_args()
 
