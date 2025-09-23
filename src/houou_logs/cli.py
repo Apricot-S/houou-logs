@@ -97,6 +97,33 @@ def yakuman_cli(args: Namespace, now: datetime | None = None) -> None:
     )
 
 
+def set_download_args(parser: ArgumentParser) -> ArgumentParser:
+    parser.add_argument(
+        "db_path",
+        type=Path,
+        help="Path to the SQLite database file.",
+        metavar="db-path",
+    )
+    parser.add_argument(
+        "-p",
+        "--players",
+        type=int,
+        help="Number of players in the game.",
+    )
+    parser.add_argument(
+        "-l",
+        "--length",
+        type=str,
+        help="Game length: 't' for tonpu (East Only), 'h' for hanchan (Two-Wind Match).",  # noqa: E501
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Maximum number of logs to download (e.g., 100).",
+    )
+    return parser
+
+
 def main() -> None:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -112,6 +139,9 @@ def main() -> None:
     parser_yakuman = subparsers.add_parser("yakuman")
     parser_yakuman = set_yakuman_args(parser_yakuman)
     parser_yakuman.set_defaults(func=yakuman_cli)
+
+    parser_download = subparsers.add_parser("download")
+    parser_download = set_download_args(parser_download)
 
     args = parser.parse_args()
 

@@ -13,6 +13,7 @@ import pytest
 from houou_logs.cli import (
     fetch_cli,
     import_cli,
+    set_download_args,
     set_fetch_args,
     set_import_args,
     set_yakuman_args,
@@ -113,3 +114,12 @@ def test_yakuman_cli_warns_yakuman_for_current_month(
     yakuman_cli(args)
     captured = capsys.readouterr()
     assert "Warning: This month is not finished yet." in captured.err
+
+
+def test_set_download_args_with_no_options() -> None:
+    parser = set_download_args(ArgumentParser())
+    args = parser.parse_args(["db.sqlite"])
+    assert args.db_path == Path("db.sqlite")
+    assert args.players is None
+    assert args.length is None
+    assert args.limit is None
