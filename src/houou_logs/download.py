@@ -25,9 +25,17 @@ def validate_limit(limit: int) -> None:
         raise UserInputError(msg)
 
 
-def download(db_path: Path, players: int, length: str, limit: int) -> int:
-    validate_players(players)
-    validate_length(length)
-    validate_limit(limit)
+def download(
+    db_path: Path,
+    players: int | None,
+    length: str | None,
+    limit: int | None,
+) -> int:
+    if players is not None:
+        validate_players(players)
+    if length is not None:
+        validate_length(length)
+    if limit is not None:
+        validate_limit(limit)
 
     return 0
