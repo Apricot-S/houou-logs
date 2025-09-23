@@ -12,6 +12,7 @@ import pytest
 
 from houou_logs.cli import (
     download_cli,
+    export_cli,
     fetch_cli,
     import_cli,
     set_download_args,
@@ -178,3 +179,24 @@ def test_set_export_args_with_options() -> None:
     assert args.length == "t"
     assert args.limit == 50
     assert args.offset == 10
+
+
+@patch("houou_logs.export.export")
+def test_export_cli_calls_export(mock_export: Mock) -> None:
+    args = Namespace(
+        db_path=Path("db.sqlite"),
+        output_dir=Path("xml/"),
+        players=4,
+        length="h",
+        limit=10,
+        offset=5,
+    )
+    export_cli(args)
+    mock_export.assert_called_once_with(
+        Path("db.sqlite"),
+        Path("xml"),
+        4,
+        "h",
+        10,
+        5,
+    )
