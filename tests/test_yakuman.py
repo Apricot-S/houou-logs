@@ -10,6 +10,7 @@ import pytest
 from houou_logs.yakuman import (
     UserInputError,
     build_url,
+    extract_ids,
     validate_yakuman_log_date,
 )
 
@@ -50,3 +51,17 @@ def test_validate_yakuman_log_date_current_month() -> None:
 
 def test_build_url() -> None:
     assert build_url(2025, 1) == "https://tenhou.net/sc/2025/01/ykm.js"
+
+
+def test_extract_ids() -> None:
+    text = """total=580570;
+updated="2025/02/01 00:12";
+ykm=['01/31 23:57','etra','[1,[12,14,15,116,118],[50794,47721,49674],12]',[39],'2025013123gm-0001-0000-12b924e3&tw=2&ts=4','01/31 23:40','åŽŸçˆ†','[137,[24,25,26,28,30,31,60,61,63,73,74,75,109,110],[],109]',[41],'2025013123gm-0089-0000-a148333d&tw=1&ts=9'];
+sw();
+"""  # noqa: E501
+
+    ids = [
+        "2025013123gm-0001-0000-12b924e3",
+        "2025013123gm-0089-0000-a148333d",
+    ]
+    assert extract_ids(text) == ids

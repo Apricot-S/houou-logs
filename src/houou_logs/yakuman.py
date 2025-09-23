@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import re
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,6 +15,10 @@ from houou_logs.fetch import TIMEOUT, create_session
 from houou_logs.log_id import parse_id
 
 YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
+
+LOG_ID_PATTERN = re.compile(
+    r"(?<=')[0-9]{10}gm-[0-9a-z]{4}-[0-9]{4}-[0-9a-z]{8}(?=&)",
+)
 
 
 def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
@@ -43,7 +48,7 @@ def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
 
 
 def extract_ids(text: str) -> list[str]:
-    raise NotImplementedError
+    return LOG_ID_PATTERN.findall(text)
 
 
 def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
