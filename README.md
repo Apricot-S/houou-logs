@@ -145,6 +145,17 @@ houou-logs validate db/2024.db
 houou-logs export <db-path> <output-dir> [--players <PLAYERS>] [--length <LENGTH>] [--limit <LIMIT>] [--offset <OFFSET>]
 ```
 
+Options:
+
+- `-p`, `--players <PLAYERS>`  
+  Number of players (`4` or `3`). If omitted, both are included.
+- `-l`, `--length <LENGTH>`  
+  Game length: `t` for tonpu (East Only), `h` for hanchan (Two-Wind Match). If omitted, both are included.
+- `--limit <LIMIT>`  
+  Max number of logs to download. If omitted, all available logs are downloaded.
+- `--offset <OFFSET>`  
+  Number of logs to skip before starting export. Default is `0`.
+
 Example:
 
 ```sh
