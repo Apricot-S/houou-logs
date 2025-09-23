@@ -108,7 +108,7 @@ def set_download_args(parser: ArgumentParser) -> ArgumentParser:
         "-p",
         "--players",
         type=int,
-        help="Number of players in the game.",
+        help="Number of players.",
     )
     parser.add_argument(
         "-l",
