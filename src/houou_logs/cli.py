@@ -7,7 +7,7 @@ from argparse import ArgumentParser, Namespace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from houou_logs import fetch, import_, yakuman
+from houou_logs import download, fetch, import_, yakuman
 from houou_logs.exceptions import UserInputError
 
 
@@ -124,6 +124,16 @@ def set_download_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
+def download_cli(args: Namespace) -> None:
+    num_logs = download.download(
+        args.db_path,
+        args.players,
+        args.length,
+        args.limit,
+    )
+    print(f"Number of logs download: {num_logs}", file=sys.stderr)
+
+
 def main() -> None:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -142,6 +152,7 @@ def main() -> None:
 
     parser_download = subparsers.add_parser("download")
     parser_download = set_download_args(parser_download)
+    parser_download.set_defaults(func=download_cli)
 
     args = parser.parse_args()
 

@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from houou_logs.cli import (
+    download_cli,
     fetch_cli,
     import_cli,
     set_download_args,
@@ -134,3 +135,10 @@ def test_set_download_args_with_options() -> None:
     assert args.players == 4
     assert args.length == "t"
     assert args.limit == 50
+
+
+@patch("houou_logs.download.download")
+def test_download_cli_calls_download(mock_download: Mock) -> None:
+    args = Namespace(db_path=Path("db.sqlite"), players=4, length="h", limit=1)
+    download_cli(args)
+    mock_download.assert_called_once_with(Path("db.sqlite"), 4, "h", 1)
