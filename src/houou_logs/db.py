@@ -150,6 +150,21 @@ def get_undownloaded_log_ids(
     return [row[0] for row in rows]
 
 
+def update_log_entries(
+    cursor: sqlite3.Cursor,
+    log_id: str,
+    was_error: bool,  # noqa: FBT001
+    log: bytes | None,
+) -> None:
+    cursor.execute(
+        """
+        UPDATE logs SET is_processed = 1, was_error = ?, log_content = ?
+        WHERE log_id = ?;
+        """,
+        (int(was_error), log, log_id),
+    )
+
+
 def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
     cursor.execute(
         """

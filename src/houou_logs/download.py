@@ -2,9 +2,12 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import gzip
+import sys
 from contextlib import closing
 from pathlib import Path
 
+from requests import Session
 from tqdm import tqdm
 
 from houou_logs import db
@@ -34,6 +37,20 @@ def build_url(log_id: str) -> str:
     return f"https://tenhou.net/0/log/?{log_id}"
 
 
+def fetch_log_content(session: Session, url: str) -> bytes:
+    resp = session.get(url, timeout=TIMEOUT)
+    if "mjlog" not in resp.text:
+        msg = "no log content in response"
+        raise RuntimeError(msg)
+
+    content = resp.content
+    if content is None:
+        msg = "content could not be retrieved"
+        raise RuntimeError(msg)
+
+    return content
+
+
 def download(
     db_path: Path,
     players: int | None,
@@ -56,22 +73,34 @@ def download(
             ids = db.get_undownloaded_log_ids(cursor, players, length, limit)
 
             for log_id in tqdm(ids):
-                content = None
+                content = b""
                 was_error = False
 
                 url = build_url(log_id)
 
                 try:
-                    resp = session.get(url, timeout=TIMEOUT)
-                    content = resp.content
+                    content = fetch_log_content(session, url)
                 except Exception as e:  # noqa: BLE001
-                    print(f"{log_id}: {e}")
+                    print(f"{log_id}: {e}", file=sys.stderr)
                     was_error = True
 
-                if content is None:
-                    print(f"{log_id}: Content could not be retrieved")
-                    was_error = True
+                compressed_content = None
+                if not was_error:
+                    try:
+                        compressed_content = gzip.compress(content)
+                    except Exception as e:  # noqa: BLE001
+                        print(
+                            f"{log_id}: failed to compress: {e}",
+                            file=sys.stderr,
+                        )
+                        was_error = True
 
+                db.update_log_entries(
+                    cursor,
+                    log_id,
+                    was_error,
+                    compressed_content,
+                )
                 num_logs += 1
 
                 conn.commit()
