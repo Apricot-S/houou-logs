@@ -9,18 +9,25 @@ from houou_logs.exceptions import UserInputError
 
 def validate_players(players: int) -> None:
     if players not in (4, 3):
-        msg = f"invalid number of players: {players}."
+        msg = f"invalid number of players: {players}"
         raise UserInputError(msg)
 
 
 def validate_length(length: str) -> None:
     if length not in ("t", "h"):
-        msg = f"invalid length of game: {length}."
+        msg = f"invalid length of game: {length}"
+        raise UserInputError(msg)
+
+
+def validate_limit(limit: int) -> None:
+    if limit <= 0:
+        msg = f"invalid limit of download: {limit}"
         raise UserInputError(msg)
 
 
 def download(db_path: Path, players: int, length: str, limit: int) -> int:
     validate_players(players)
     validate_length(length)
+    validate_limit(limit)
 
     return 0
