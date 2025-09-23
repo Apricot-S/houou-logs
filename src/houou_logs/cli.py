@@ -108,18 +108,18 @@ def set_download_args(parser: ArgumentParser) -> ArgumentParser:
         "-p",
         "--players",
         type=int,
-        help="Number of players.",
+        help="Number of players. If omitted, both are included.",
     )
     parser.add_argument(
         "-l",
         "--length",
         type=str,
-        help="Game length: 't' for tonpu (East Only), 'h' for hanchan (Two-Wind Match).",  # noqa: E501
+        help="Game length: 't' for tonpu (East Only), 'h' for hanchan (Two-Wind Match). If omitted, both are included.",  # noqa: E501
     )
     parser.add_argument(
         "--limit",
         type=int,
-        help="Max number of logs to download.",
+        help="Max number of logs to download. If omitted, all available logs are downloaded.",  # noqa: E501
     )
     return parser
 
