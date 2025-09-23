@@ -97,11 +97,11 @@ houou-logs download <db-path> [--players <PLAYERS>] [--length <LENGTH>] [--limit
 Options:
 
 - `-p`, `--players <PLAYERS>`  
-  Number of players (`4` or `3`).
+  Number of players (`4` or `3`). If omitted, both are included.
 - `-l`, `--length <LENGTH>`  
-  Game length: `t` for tonpu (East Only), `h` for hanchan (Two-Wind Match).
+  Game length: `t` for tonpu (East Only), `h` for hanchan (Two-Wind Match). If omitted, both are included.
 - `--limit <LIMIT>`  
-  Max number of logs to download.
+  Max number of logs to download. If omitted, all available logs are downloaded.
 
 Example:
 
