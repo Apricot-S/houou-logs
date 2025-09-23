@@ -13,21 +13,13 @@ from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, extract_log_entries
+from houou_logs.session import TIMEOUT, create_session
 
 MIN_FETCH_INTERVAL = timedelta(minutes=20)
 
 INDEX_URL_LATEST = "https://tenhou.net/sc/raw/list.cgi"
 INDEX_URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
 LOG_DOWNLOAD_URL = "https://tenhou.net/sc/raw/dat/"
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",  # noqa: E501
-}
-
-TIMEOUT = (
-    5.0,  # connect timeout
-    5.0,  # read timeout
-)
 
 FILE_INDEX_ENTRY_PATTERN = re.compile(r"file:'([^']+)',size:(\d+)")
 
@@ -41,12 +33,6 @@ def should_fetch(
         now = datetime.now(tz=UTC)
 
     return now - last_fetch_time > MIN_FETCH_INTERVAL
-
-
-def create_session() -> requests.Session:
-    session = requests.Session()
-    session.headers.update(HEADERS)
-    return session
 
 
 def fetch_file_index_text(session: requests.Session, url: str) -> str:

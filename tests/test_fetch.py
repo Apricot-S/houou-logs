@@ -10,7 +10,6 @@ from requests import Response, Session
 from requests.exceptions import HTTPError
 
 from houou_logs.fetch import (
-    create_session,
     exclude_unchanged_files,
     fetch_file_index_text,
     filter_houou_files,
@@ -30,12 +29,6 @@ from houou_logs.fetch import (
 def test_should_fetch(last_fetch_time: datetime, *, expected: bool) -> None:
     now = datetime(2025, 9, 20, 11, 0, 0, 0, tzinfo=UTC)
     assert should_fetch(last_fetch_time, now=now) == expected
-
-
-def test_create_session() -> None:
-    session = create_session()
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0"  # noqa: E501
-    assert session.headers["User-Agent"] == user_agent
 
 
 def test_fetch_file_index_text_success() -> None:

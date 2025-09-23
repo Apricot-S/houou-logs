@@ -11,8 +11,8 @@ from requests import Session
 
 from houou_logs import db
 from houou_logs.exceptions import UserInputError
-from houou_logs.fetch import TIMEOUT, create_session
 from houou_logs.log_id import parse_id
+from houou_logs.session import TIMEOUT, create_session
 
 YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
 

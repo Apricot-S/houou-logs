@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.exceptions import UserInputError
-from houou_logs.fetch import TIMEOUT, create_session
+from houou_logs.session import TIMEOUT, create_session
 
 
 def validate_players(players: int) -> None:
