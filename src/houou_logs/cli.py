@@ -30,7 +30,7 @@ def set_import_args(parser: ArgumentParser) -> ArgumentParser:
 def import_cli(args: Namespace) -> None:
     num_logs = import_.import_(args.db_path, args.archive_path)
     print(
-        f"Number of log entries targeted for DB insertion: {num_logs}",
+        f"Number of log entries inserted into the DB: {num_logs}",
         file=sys.stderr,
     )
 
@@ -56,7 +56,7 @@ def fetch_cli(args: Namespace) -> None:
     if num_logs == -1:
         msg = "Skipping fetch: last fetch was within 20 minutes."
     else:
-        msg = f"Number of log entries targeted for DB insertion: {num_logs}"
+        msg = f"Number of log entries inserted into the DB: {num_logs}"
     print(msg, file=sys.stderr)
 
 
@@ -92,7 +92,7 @@ def yakuman_cli(args: Namespace, now: datetime | None = None) -> None:
 
     num_logs = yakuman.yakuman(args.db_path, args.year, args.month, now)
     print(
-        f"Number of log entries targeted for DB insertion: {num_logs}",
+        f"Number of log entries inserted into the DB: {num_logs}",
         file=sys.stderr,
     )
 
