@@ -6,7 +6,7 @@ Tools to download Houou (Phoenix) logs from tenhou.net
 > Tenhou allows only **one session** to download logs at a time.  
 > Running multiple instances (e.g., via multiple terminals or background processes) **violates Tenhou's terms of use** and may result in access restrictions or bans.
 >
-> This tool is designed to operate with a **single session only**, in accordance with Tenhou’s policy.  
+> This tool is designed to operate with a **single session only**, in accordance with Tenhou's policy.  
 > While it does not prevent concurrent execution at the system level,  
 > **do not attempt to run multiple sessions simultaneously.**
 >
