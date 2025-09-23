@@ -90,6 +90,10 @@ houou-logs yakuman db/yakuman/2007/01.db 2007 01
 
 ### Download log contents
 
+Download the log contents (mjlog) into the database using previously fetched log IDs.
+
+This command skips logs that are already downloaded and stored, and only fetches log contents for undownloaded IDs that match the specified conditions.
+
 ```sh
 houou-logs download <db-path> [--players <PLAYERS>] [--length <LENGTH>] [--limit <LIMIT>]
 ```
