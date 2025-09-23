@@ -119,7 +119,7 @@ def set_download_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--limit",
         type=int,
-        help="Maximum number of logs to download (e.g., 100).",
+        help="Max number of logs to download.",
     )
     return parser
 
