@@ -13,7 +13,14 @@ def validate_players(players: int) -> None:
         raise UserInputError(msg)
 
 
+def validate_length(length: str) -> None:
+    if length not in ("t", "h"):
+        msg = f"invalid length of game: {length}."
+        raise UserInputError(msg)
+
+
 def download(db_path: Path, players: int, length: str, limit: int) -> int:
     validate_players(players)
+    validate_length(length)
 
     return 0

@@ -4,7 +4,7 @@
 
 import pytest
 
-from houou_logs.download import validate_players
+from houou_logs.download import validate_length, validate_players
 from houou_logs.exceptions import UserInputError
 
 
@@ -17,3 +17,14 @@ def test_validate_players_accepts_valid_counts(players: int) -> None:
 def test_validate_players_rejects_out_of_range(players: int) -> None:
     with pytest.raises(UserInputError):
         validate_players(players)
+
+
+@pytest.mark.parametrize("length", ["t", "h"])
+def test_validate_length_accepts_valid_mode(length: str) -> None:
+    validate_length(length)
+
+
+@pytest.mark.parametrize("length", ["", "i"])
+def test_validate_length_rejects_invalid_mode(length: str) -> None:
+    with pytest.raises(UserInputError):
+        validate_length(length)
