@@ -91,8 +91,17 @@ houou-logs yakuman db/yakuman/2007/01.db 2007 01
 ### Download log contents
 
 ```sh
-houou-logs download <db-path> [--players <4 or 3>] [--length <t or h>] [--limit <n>]
+houou-logs download <db-path> [--players <PLAYERS>] [--length <LENGTH>] [--limit <LIMIT>]
 ```
+
+Options:
+
+- `-p`, `--players <PLAYERS>`  
+  Number of players (`4` or `3`).
+- `-l`, `--length <LENGTH>`  
+  Game length: `t` for tonpu (East Only), `h` for hanchan (Two-Wind Match).
+- `--limit <LIMIT>`  
+  Max number of logs to download.
 
 Example:
 
@@ -115,7 +124,7 @@ houou-logs validate db/2024.db
 ### Export raw log contents (xml) from DB
 
 ```sh
-houou-logs export <db-path> <output-dir> [--players <4 or 3>] [--length <t or h>] [--limit <n>] [--offset <n>]
+houou-logs export <db-path> <output-dir> [--players <PLAYERS>] [--length <LENGTH>] [--limit <LIMIT>] [--offset <OFFSET>]
 ```
 
 Example:
