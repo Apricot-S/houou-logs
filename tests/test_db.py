@@ -187,6 +187,48 @@ def test_get_undownloaded_log_ids() -> None:
         conn.close()
 
 
+def test_update_log_entries() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        entry = db.LogEntry(
+            id="2009010100gm-00a9-0000-00000000",
+            date="2009-01-01",
+            num_players=4,
+            is_tonpu=False,
+            is_processed=False,
+            was_error=False,
+            log=None,
+        )
+        db.insert_log_entries(cursor, [entry])
+        conn.commit()
+
+        db.update_log_entries(
+            cursor,
+            entry.id,
+            True,  # noqa: FBT003
+            b"sample",
+        )
+
+        cursor.execute("SELECT * FROM logs;")
+        actual = cursor.fetchone()
+        expected = (
+            entry.id,
+            entry.date,
+            entry.num_players,
+            entry.is_tonpu,
+            1,
+            1,
+            b"sample",
+        )
+        assert actual == expected
+    finally:
+        conn.close()
+
+
 def test_update_last_fetch_time() -> None:
     conn = db.open_db(":memory:")
 

@@ -158,8 +158,8 @@ def update_log_entries(
 ) -> None:
     cursor.execute(
         """
-        UPDATE logs SET is_processed = 1, was_error = ?, log_content = ?
-        WHERE log_id = ?;
+        UPDATE logs SET is_processed = 1, was_error = ?, log = ?
+        WHERE id = ?;
         """,
         (int(was_error), log, log_id),
     )
