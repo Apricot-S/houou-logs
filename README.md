@@ -2,6 +2,19 @@
 
 Tools to download Houou (Phoenix) logs from tenhou.net
 
+> [!WARNING]
+> Tenhou allows only **one session** to download logs at a time.  
+> Running multiple instances (e.g., via multiple terminals or background processes) **violates Tenhou's terms of use** and may result in access restrictions or bans.
+>
+> This tool is designed to operate with a **single session only**, in accordance with Tenhou’s policy.  
+> While it does not prevent concurrent execution at the system level,  
+> **do not attempt to run multiple sessions simultaneously.**
+>
+> Reference:
+>
+> - <https://tenhou.net/sc/raw/>
+> - <https://x.com/tsuno_s/status/1804487739657580636>
+
 ## Installation
 
 ```sh
@@ -74,9 +87,10 @@ houou-logs fetch db/latest.db --archive
 Fetch log IDs where a yakuman occurred for a specific year and month.
 
 > [!NOTE]
-> Yakuman logs are available starting from October 2006.  
-> Only four-player game logs are available. Three-player games are not included.  
-> Yakuman logs include all tables (four-player only), not just the Houou (Phoenix) table.
+>
+> - Yakuman logs are available starting from October 2006.
+> - Only four-player game logs are available. Three-player games are not included.
+> - Yakuman logs include all tables (four-player only), not just the Houou (Phoenix) table.
 
 ```sh
 houou-logs yakuman <db-path> <year> <month>
