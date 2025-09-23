@@ -93,8 +93,8 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 with io.BytesIO(page.content) as f:
                     entries = extract_log_entries(filename, f)
 
-                num_logs += len(entries)
                 db.insert_log_entries(cursor, entries)
+                num_logs += len(entries)
                 db.insert_file_index(cursor, filename, size)
 
                 conn.commit()
