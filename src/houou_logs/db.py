@@ -110,6 +110,57 @@ def insert_log_entries(
     )
 
 
+def get_undownloaded_log_entries(
+    cursor: sqlite3.Cursor,
+    players: int | None,
+    length: str | None,
+    limit: int | None,
+) -> list[LogEntry]:
+    conditions = ["is_processed = 0", "was_error = 0"]
+    params: list = []
+
+    if players is not None:
+        conditions.append("num_players = ?")
+        params.append(players)
+
+    if length is not None:
+        match length:
+            case "t":
+                conditions.append("is_tonpu = 1")
+            case "h":
+                conditions.append("is_tonpu = 0")
+            case _:
+                msg = f"Unknown length: {length}"
+                raise ValueError(msg)
+
+    sql = f"""
+        SELECT id, date, num_players, is_tonpu, is_processed, was_error, log
+        FROM logs
+        WHERE {" AND ".join(conditions)}
+        ORDER BY id ASC
+        """  # noqa: S608
+
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+
+    cursor.execute(sql, params)
+    rows = cursor.fetchall()
+
+    return [
+        LogEntry(
+            id=row[0],
+            date=row[1],
+            num_players=row[2],
+            is_tonpu=bool(row[3]),
+            is_processed=bool(row[4]),
+            was_error=bool(row[5]),
+            log=row[6],
+        )
+        for row in rows
+    ]
+
+
 def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
     cursor.execute(
         """
