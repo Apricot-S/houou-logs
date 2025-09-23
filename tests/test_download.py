@@ -5,6 +5,7 @@
 import pytest
 
 from houou_logs.download import (
+    build_url,
     validate_length,
     validate_limit,
     validate_players,
@@ -43,3 +44,10 @@ def test_validate_limit_accepts_valid_counts(limit: int) -> None:
 def test_validate_limit_rejects_out_of_range(limit: int) -> None:
     with pytest.raises(UserInputError):
         validate_limit(limit)
+
+
+def test_build_url() -> None:
+    assert (
+        build_url("2024060600gm-00b9-0000-88e70833")
+        == "https://tenhou.net/0/log/?2024060600gm-00b9-0000-88e70833"
+    )

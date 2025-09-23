@@ -2,9 +2,14 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+from contextlib import closing
 from pathlib import Path
 
+from tqdm import tqdm
+
+from houou_logs import db
 from houou_logs.exceptions import UserInputError
+from houou_logs.fetch import TIMEOUT, create_session
 
 
 def validate_players(players: int) -> None:
@@ -25,6 +30,10 @@ def validate_limit(limit: int) -> None:
         raise UserInputError(msg)
 
 
+def build_url(log_id: str) -> str:
+    return f"https://tenhou.net/0/log/?{log_id}"
+
+
 def download(
     db_path: Path,
     players: int | None,
@@ -38,4 +47,33 @@ def download(
     if limit is not None:
         validate_limit(limit)
 
-    return 0
+    num_logs = 0
+    with closing(db.open_db(db_path)) as conn, conn:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        with create_session() as session:
+            ids = db.get_undownloaded_log_ids(cursor, players, length, limit)
+
+            for log_id in tqdm(ids):
+                content = None
+                was_error = False
+
+                url = build_url(log_id)
+
+                try:
+                    resp = session.get(url, timeout=TIMEOUT)
+                    content = resp.content
+                except Exception as e:  # noqa: BLE001
+                    print(f"{log_id}: {e}")
+                    was_error = True
+
+                if content is None:
+                    print(f"{log_id}: Content could not be retrieved")
+                    was_error = True
+
+                num_logs += 1
+
+                conn.commit()
+
+    return num_logs
