@@ -130,7 +130,7 @@ def get_undownloaded_log_ids(
             case "h":
                 conditions.append("is_tonpu = 0")
             case _:
-                msg = f"Unknown length: {length}"
+                msg = f"unknown length: {length}"
                 raise ValueError(msg)
 
     sql = f"""
