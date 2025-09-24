@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 
 import pytest
 
+from houou_logs.exceptions import UserInputError
 from houou_logs.yakuman import (
-    UserInputError,
     build_url,
     extract_ids,
     validate_yakuman_log_date,
