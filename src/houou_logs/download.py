@@ -15,6 +15,12 @@ from houou_logs.exceptions import UserInputError
 from houou_logs.session import TIMEOUT, create_session
 
 
+def validate_db_path(db_path: Path) -> None:
+    if not db_path.is_file():
+        msg = f"database file is not found: {db_path}"
+        raise UserInputError(msg)
+
+
 def validate_players(players: int) -> None:
     if players not in (4, 3):
         msg = f"invalid number of players: {players}"
@@ -57,6 +63,7 @@ def download(
     length: str | None,
     limit: int | None,
 ) -> int:
+    validate_db_path(db_path)
     if players is not None:
         validate_players(players)
     if length is not None:
@@ -66,7 +73,6 @@ def download(
 
     num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:
-        db.setup_table(conn)
         cursor = conn.cursor()
 
         with create_session() as session:
