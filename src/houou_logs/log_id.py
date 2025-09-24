@@ -58,10 +58,10 @@ def parse_id(time: str, log_id: str) -> LogEntry:
 def extract_log_entries(filename: str, fileobj: IO[bytes]) -> list[LogEntry]:
     if filename.endswith(".html.gz"):
         # Logs from 2013 onwards are compressed
-        with gzip.open(fileobj, mode="rt", encoding="shift_jis") as gz:
+        with gzip.open(fileobj, mode="rt", encoding="utf-8") as gz:
             text = gz.read()
     else:
-        text = fileobj.read().decode("shift_jis")
+        text = fileobj.read().decode("utf-8")
 
     ids = extract_ids(text)
     return [parse_id(i[0], i[1]) for i in ids]

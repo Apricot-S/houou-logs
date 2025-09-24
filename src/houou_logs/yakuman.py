@@ -43,7 +43,7 @@ def build_url(year: int, month: int) -> str:
 def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
     res = session.get(url, timeout=TIMEOUT)
     res.raise_for_status()
-    return res.content.decode("shift_jis")
+    return res.content.decode("utf-8")
 
 
 def extract_ids(text: str) -> list[tuple[str, str]]:
