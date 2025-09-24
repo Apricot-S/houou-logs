@@ -9,13 +9,7 @@ from houou_logs.download import (
     validate_limit,
     validate_players,
 )
-from houou_logs.exceptions import UserInputError
-
-
-def validate_offset(offset: int) -> None:
-    if offset < 0:
-        msg = f"invalid offset of export: {offset}"
-        raise UserInputError(msg)
+from houou_logs.user_input import validate_offset
 
 
 def export(
@@ -32,7 +26,7 @@ def export(
         validate_length(length)
     if limit is not None:
         validate_limit(limit)
-    validate_limit(offset)
+    validate_offset(offset)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
