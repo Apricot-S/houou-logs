@@ -199,8 +199,7 @@ def iter_log_contents(
 
     if limit is not None:
         sql += " LIMIT ? OFFSET ?"
-        params.append(limit)
-        params.append(offset)
+        params.extend([limit, offset])
 
     cursor.execute(sql, params)
     yield from cursor
@@ -230,18 +229,18 @@ def count_log_contents(
                 msg = f"unknown length: {length}"
                 raise ValueError(msg)
 
-    sql = f"""
-        SELECT COUNT(id)
+    inner_sql = f"""
+        SELECT id
         FROM logs
         WHERE {" AND ".join(conditions)}
         ORDER BY id ASC
         """  # noqa: S608
 
     if limit is not None:
-        sql += " LIMIT ? OFFSET ?"
-        params.append(limit)
-        params.append(offset)
+        inner_sql += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
+    sql = f"SELECT COUNT(*) FROM ({inner_sql})"  # noqa: S608
     cursor.execute(sql, params)
     return cursor.fetchone()[0]
 
