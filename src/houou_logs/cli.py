@@ -167,7 +167,7 @@ def set_export_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--offset",
         type=int,
-        help="Number of logs to skip before starting export. Default is 0.",
+        help="Number of logs to skip before starting export. Default is 0. Ignored if '--limit' is not specified.",  # noqa: E501
         default=0,
     )
     return parser

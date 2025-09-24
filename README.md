@@ -10,7 +10,7 @@ Tools to download Houou (Phoenix) logs from tenhou.net
 > While it does not prevent concurrent execution at the system level,  
 > **do not attempt to run multiple sessions simultaneously.**
 >
-> Reference:
+> References:
 >
 > - <https://tenhou.net/sc/raw/>
 > - <https://x.com/tsuno_s/status/1804487739657580636>
@@ -154,7 +154,7 @@ Options:
 - `--limit <LIMIT>`  
   Max number of logs to download. If omitted, all available logs are downloaded.
 - `--offset <OFFSET>`  
-  Number of logs to skip before starting export. Default is `0`.
+  Number of logs to skip before starting export. Default is `0`. Ignored if `--limit` is not specified.
 
 Example:
 
