@@ -84,7 +84,7 @@ def test_extract_log_entries_skips_extension_log_gz(tmp_path: Path) -> None:
 def test_extract_log_entries_parse_extension_html(tmp_path: Path) -> None:
     filename = "valid_log.html"
     fake_file = tmp_path / filename
-    fake_file.write_text(MOCK_LOG)
+    fake_file.write_text(MOCK_LOG, encoding="utf-8")
 
     with fake_file.open(mode="br") as f:
         entries = extract_log_entries(filename, f)
