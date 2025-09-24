@@ -2,15 +2,31 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+
+from pathlib import Path
+
 import pytest
 
 from houou_logs.download import (
     build_url,
+    validate_db_path,
     validate_length,
     validate_limit,
     validate_players,
 )
 from houou_logs.exceptions import UserInputError
+
+
+def test_validate_db_path_when_file_exists(tmp_path: Path) -> None:
+    db_file = tmp_path / "test.db"
+    db_file.write_text("dummy content")
+    validate_db_path(db_file)
+
+
+def test_validate_db_path_when_file_does_not_exist(tmp_path: Path) -> None:
+    db_file = tmp_path / "not_exist.db"
+    with pytest.raises(UserInputError):
+        validate_db_path(db_file)
 
 
 @pytest.mark.parametrize("players", [4, 3])
