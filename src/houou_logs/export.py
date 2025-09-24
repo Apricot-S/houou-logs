@@ -32,7 +32,7 @@ def export(
         validate_length(length)
     if limit is not None:
         validate_limit(limit)
-    validate_limit(offset)
+    validate_offset(offset)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
