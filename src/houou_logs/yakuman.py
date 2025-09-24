@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import ast
 import re
 from contextlib import closing
 from datetime import UTC, datetime
@@ -16,9 +17,7 @@ from houou_logs.session import TIMEOUT, create_session
 
 YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
 
-LOG_ID_PATTERN = re.compile(
-    r"(?<=')[0-9]{10}gm-[0-9a-z]{4}-[0-9]{4}-[0-9a-z]{8}(?=&)",
-)
+YKM_ARRAY_PATTERN = re.compile(r"ykm=(\[.*?\]);", re.DOTALL)
 
 
 def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
@@ -48,7 +47,18 @@ def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
 
 
 def extract_ids(text: str) -> list[str]:
-    return LOG_ID_PATTERN.findall(text)
+    match = YKM_ARRAY_PATTERN.search(text)
+    if not match:
+        msg = "ykm array not found in input text"
+        raise RuntimeError(msg)
+
+    ykm_text = match.group(1)
+    ykm_array = ast.literal_eval(ykm_text)
+
+    return [
+        ykm_array[i + 4].split("&", 1)[0]
+        for i in range(0, len(ykm_array) - 4, 5)
+    ]
 
 
 def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
