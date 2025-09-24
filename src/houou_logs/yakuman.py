@@ -46,7 +46,7 @@ def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
     return res.content.decode("utf-8")
 
 
-def extract_ids(text: str) -> list[str]:
+def extract_ids(text: str) -> list[tuple[str, str]]:
     match = YKM_ARRAY_PATTERN.search(text)
     if not match:
         msg = "ykm array not found in input text"
@@ -56,7 +56,7 @@ def extract_ids(text: str) -> list[str]:
     ykm_array = ast.literal_eval(ykm_text)
 
     return [
-        ykm_array[i + 4].split("&", 1)[0]
+        (ykm_array[i], ykm_array[i + 4].split("&", 1)[0])
         for i in range(0, len(ykm_array) - 4, 5)
     ]
 
@@ -73,7 +73,7 @@ def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
             resp = fetch_yakuman_log_ids_text(session, url)
 
             ids = extract_ids(resp)
-            entries = [parse_id(i) for i in ids]
+            entries = [parse_id(i[1]) for i in ids]
 
             db.insert_log_entries(cursor, entries)
             num_logs = len(entries)
