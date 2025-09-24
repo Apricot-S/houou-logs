@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import gzip
 from contextlib import closing
 from pathlib import Path
 
@@ -42,13 +43,25 @@ def export(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:
         cursor = conn.cursor()
 
-        logs = db.get_log_contents(cursor, players, length, limit, offset)
+        num_logs = db.count_log_contents(
+            cursor,
+            players,
+            length,
+            limit,
+            offset,
+        )
+        logs_iter = db.iter_log_contents(
+            cursor,
+            players,
+            length,
+            limit,
+            offset,
+        )
 
-        for log in tqdm(logs):
-            num_logs += 1
+        for log_id, compressed_content in tqdm(logs_iter):
+            log_content = gzip.decompress(compressed_content).decode("utf-8")
 
     return num_logs

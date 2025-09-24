@@ -229,7 +229,7 @@ def test_update_log_entries() -> None:
         conn.close()
 
 
-def test_get_log_contents() -> None:
+def test_iter_log_contents() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -278,7 +278,7 @@ def test_get_log_contents() -> None:
         db.insert_log_entries(cursor, entries)
         conn.commit()
 
-        actual = db.get_log_contents(cursor, None, None, None, 0)
+        actual = list(db.iter_log_contents(cursor, None, None, None, 0))
         expected = [("2013020101gm-00f1-0000-00000000", b"sample log data")]
         assert actual == expected
     finally:

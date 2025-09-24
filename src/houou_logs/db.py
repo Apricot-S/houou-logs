@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -165,13 +166,13 @@ def update_log_entries(
     )
 
 
-def get_log_contents(
+def iter_log_contents(
     cursor: sqlite3.Cursor,
     players: int | None,
     length: str | None,
     limit: int | None,
     offset: int,
-) -> list[tuple[str, bytes]]:
+) -> Iterator[tuple[str, bytes]]:
     conditions = ["is_processed = 1", "was_error = 0"]
     params: list = []
 
@@ -202,7 +203,7 @@ def get_log_contents(
         params.append(offset)
 
     cursor.execute(sql, params)
-    return cursor.fetchall()
+    yield from cursor
 
 
 def count_log_contents(
