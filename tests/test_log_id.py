@@ -6,7 +6,7 @@ from pathlib import Path
 
 from houou_logs.db import LogEntry
 from houou_logs.log_id import (
-    LogParser,
+    extract_ids,
     extract_log_entries,
     parse_date,
     parse_type,
@@ -21,34 +21,24 @@ MOCK_LOG = """
 
 
 def test_extract_ids_empty_text() -> None:
-    parser = LogParser()
-    assert parser.extract_ids("") == []
+    assert extract_ids("") == []
 
 
 def test_extract_ids_no_match() -> None:
     log = "L1000 | 21:37 | 四般南－－ | NoName(+48) NoName(+13) NoName(-25) NoName(-36)"  # noqa: E501, RUF001
-    parser = LogParser()
-    assert parser.extract_ids(log) == []
+    assert extract_ids(log) == []
 
 
 def test_extract_ids_multiple_matches() -> None:
     ids = [
-        "2009020100gm-00a9-0000-00000000",
-        "2009020123gm-00a9-0000-00000001",
+        ("00:00", "2009020100gm-00a9-0000-00000000"),
+        ("23:02", "2009020123gm-00a9-0000-00000001"),
     ]
-    parser = LogParser()
-    assert parser.extract_ids(MOCK_LOG) == ids
-
-
-def test_extract_ids_clears_state() -> None:
-    parser = LogParser()
-    _ = parser.extract_ids(MOCK_LOG)
-    ids2 = parser.extract_ids("")
-    assert ids2 == []
+    assert extract_ids(MOCK_LOG) == ids
 
 
 def test_parse_date() -> None:
-    assert parse_date("2024010100") == "2024-01-01 00"
+    assert parse_date("00:05", "2024010100") == "2024-01-01T00:05"
 
 
 def test_parse_type_4_hanchan() -> None:
@@ -102,7 +92,7 @@ def test_extract_log_entries_parse_extension_html(tmp_path: Path) -> None:
     expected = [
         LogEntry(
             id="2009020100gm-00a9-0000-00000000",
-            date="2009-02-01 00",
+            date="2009-02-01T00:00",
             num_players=4,
             is_tonpu=False,
             is_processed=False,
@@ -111,7 +101,7 @@ def test_extract_log_entries_parse_extension_html(tmp_path: Path) -> None:
         ),
         LogEntry(
             id="2009020123gm-00a9-0000-00000001",
-            date="2009-02-01 23",
+            date="2009-02-01T23:02",
             num_players=4,
             is_tonpu=False,
             is_processed=False,

@@ -4,64 +4,30 @@
 
 import gzip
 import re
-from functools import cache
-from html.parser import HTMLParser
 from typing import IO
 
 from houou_logs.db import LogEntry
 
 HOUOU_ARCHIVE_PREFIX = "scc"
 
+LINE_PATTERN = re.compile(r'^(\d{2}:\d{2}).*?log=([^">]+)', re.MULTILINE)
+
 TYPE_IS_HANCHAN = 0x008
 TYPE_IS_3_PLAYERS = 0x010
 
 
-class LogParser(HTMLParser):
-    TARGET_TAG = "a"
-    TARGET_ATTR = "href"
-    LOG_PATTERN = re.compile(r"log=([^\"]+)")
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.ids: list[str] = []
-
-    def handle_starttag(
-        self,
-        tag: str,
-        attrs: list[tuple[str, str | None]],
-    ) -> None:
-        if tag != self.TARGET_TAG:
-            return
-
-        for attr_name, attr_value in attrs:
-            if attr_name != self.TARGET_ATTR:
-                continue
-            if attr_value is None:
-                continue
-            if match := self.LOG_PATTERN.search(attr_value):
-                self.ids.append(match.group(1))
-
-    def extract_ids(self, html: str) -> list[str]:
-        self.feed(html)
-        ids = self.ids
-        self.clear_ids()
-        return ids
-
-    def clear_ids(self) -> None:
-        self.ids = []
+def extract_ids(text: str) -> list[tuple[str, str]]:
+    matches = LINE_PATTERN.findall(text)
+    if not matches:
+        return []
+    return matches
 
 
-@cache
-def get_log_parser() -> LogParser:
-    return LogParser()
-
-
-def parse_date(log_date: str) -> str:
+def parse_date(time: str, log_date: str) -> str:
     year = log_date[0:4]
     month = log_date[4:6]
     day = log_date[6:8]
-    hour = log_date[8:10]
-    return f"{year}-{month}-{day} {hour}"
+    return f"{year}-{month}-{day}T{time}"
 
 
 def parse_type(log_type: str) -> tuple[int, bool]:
@@ -74,8 +40,8 @@ def parse_type(log_type: str) -> tuple[int, bool]:
     return (num_players, is_tonpu)
 
 
-def parse_id(log_id: str) -> LogEntry:
-    date = parse_date(log_id[0:10])
+def parse_id(time: str, log_id: str) -> LogEntry:
+    date = parse_date(time, log_id[0:10])
     num_players, is_tonpu = parse_type(log_id[13:17])
 
     return LogEntry(
@@ -92,11 +58,10 @@ def parse_id(log_id: str) -> LogEntry:
 def extract_log_entries(filename: str, fileobj: IO[bytes]) -> list[LogEntry]:
     if filename.endswith(".html.gz"):
         # Logs from 2013 onwards are compressed
-        with gzip.open(fileobj, mode="rt", encoding="utf-8") as gz:
+        with gzip.open(fileobj, mode="rt", encoding="shift_jis") as gz:
             text = gz.read()
     else:
-        text = str(fileobj.read())
+        text = fileobj.read().decode("shift_jis")
 
-    parser = get_log_parser()
-    ids = parser.extract_ids(text)
-    return [parse_id(i) for i in ids]
+    ids = extract_ids(text)
+    return [parse_id(i[0], i[1]) for i in ids]
