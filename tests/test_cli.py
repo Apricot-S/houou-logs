@@ -19,6 +19,7 @@ from houou_logs.cli import (
     set_export_args,
     set_fetch_args,
     set_import_args,
+    set_validate_args,
     set_yakuman_args,
     yakuman_cli,
 )
@@ -144,6 +145,20 @@ def test_download_cli_calls_download(mock_download: Mock) -> None:
     args = Namespace(db_path=Path("db.sqlite"), players=4, length="h", limit=1)
     download_cli(args)
     mock_download.assert_called_once_with(Path("db.sqlite"), 4, "h", 1)
+
+
+def test_set_validate_args_without_options() -> None:
+    parser = set_validate_args(ArgumentParser())
+    args = parser.parse_args(["db.sqlite"])
+    assert args.db_path == Path("db.sqlite")
+    assert args.year is None
+
+
+def test_set_validate_args_with_options() -> None:
+    parser = set_validate_args(ArgumentParser())
+    args = parser.parse_args(["db.sqlite", "-y", "2024"])
+    assert args.db_path == Path("db.sqlite")
+    assert args.year == 2024
 
 
 def test_set_export_args_without_options() -> None:

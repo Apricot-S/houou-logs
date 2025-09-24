@@ -134,6 +134,22 @@ def download_cli(args: Namespace) -> None:
     print(f"Number of logs downloaded: {num_logs}", file=sys.stderr)
 
 
+def set_validate_args(parser: ArgumentParser) -> ArgumentParser:
+    parser.add_argument(
+        "db_path",
+        type=Path,
+        help="Path to the SQLite database file.",
+        metavar="db-path",
+    )
+    parser.add_argument(
+        "-y",
+        "--year",
+        type=int,
+        help="Validate only logs from the specified year. If omitted, all logs stored in the database are validated.",  # noqa: E501
+    )
+    return parser
+
+
 def set_export_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "db_path",
@@ -204,6 +220,9 @@ def main() -> None:
     parser_download = subparsers.add_parser("download")
     parser_download = set_download_args(parser_download)
     parser_download.set_defaults(func=download_cli)
+
+    parser_validate = subparsers.add_parser("validate")
+    parser_validate = set_validate_args(parser_validate)
 
     parser_export = subparsers.add_parser("export")
     parser_export = set_export_args(parser_export)
