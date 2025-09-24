@@ -165,6 +165,48 @@ def update_log_entries(
     )
 
 
+def get_log_contents(
+    cursor: sqlite3.Cursor,
+    players: int | None,
+    length: str | None,
+    limit: int | None,
+    offset: int,
+) -> list[bytes]:
+    conditions = ["is_processed = 1", "was_error = 0"]
+    params: list = []
+
+    if players is not None:
+        conditions.append("num_players = ?")
+        params.append(players)
+
+    if length is not None:
+        match length:
+            case "t":
+                conditions.append("is_tonpu = 1")
+            case "h":
+                conditions.append("is_tonpu = 0")
+            case _:
+                msg = f"unknown length: {length}"
+                raise ValueError(msg)
+
+    sql = f"""
+        SELECT log
+        FROM logs
+        WHERE {" AND ".join(conditions)}
+        ORDER BY id ASC
+        """  # noqa: S608
+
+    if limit is not None:
+        sql += " LIMIT ? OFFSET ?"
+        params.append(limit)
+        params.append(offset)
+
+    cursor.execute(sql, params)
+    rows = cursor.fetchall()
+
+    return [row[0] for row in rows]
+
+
 def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
     cursor.execute(
         """

@@ -2,9 +2,14 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+from contextlib import closing
 from pathlib import Path
 
+from tqdm import tqdm
+
+from houou_logs import db
 from houou_logs.download import (
+    validate_db_path,
     validate_length,
     validate_limit,
     validate_players,
@@ -26,6 +31,7 @@ def export(
     limit: int | None,
     offset: int,
 ) -> int:
+    validate_db_path(db_path)
     if players is not None:
         validate_players(players)
     if length is not None:
@@ -36,4 +42,13 @@ def export(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    return 0
+    num_logs = 0
+    with closing(db.open_db(db_path)) as conn, conn:
+        cursor = conn.cursor()
+
+        logs = db.get_log_contents(cursor, players, length, limit, offset)
+
+        for log in tqdm(logs):
+            num_logs += 1
+
+    return num_logs

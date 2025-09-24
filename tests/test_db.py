@@ -155,7 +155,7 @@ def test_get_undownloaded_log_ids() -> None:
                 is_tonpu=True,
                 is_processed=True,
                 was_error=True,
-                log=b"sample log data",
+                log=b"broken log data",
             ),
             db.LogEntry(
                 id="2013020101gm-00f1-0000-00000000",
@@ -173,7 +173,7 @@ def test_get_undownloaded_log_ids() -> None:
                 is_tonpu=True,
                 is_processed=False,
                 was_error=True,
-                log=b"sample log data",
+                log=b"invalid log data",
             ),
         ]
 
@@ -224,6 +224,62 @@ def test_update_log_entries() -> None:
             1,
             b"sample",
         )
+        assert actual == expected
+    finally:
+        conn.close()
+
+
+def test_get_log_contents() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        entries = [
+            db.LogEntry(
+                id="2009010100gm-00a9-0000-00000000",
+                date="2009-01-01",
+                num_players=4,
+                is_tonpu=False,
+                is_processed=False,
+                was_error=False,
+                log=None,
+            ),
+            db.LogEntry(
+                id="2013020100gm-00f1-0000-00000000",
+                date="2013-02-01",
+                num_players=3,
+                is_tonpu=True,
+                is_processed=True,
+                was_error=True,
+                log=b"broken log data",
+            ),
+            db.LogEntry(
+                id="2013020101gm-00f1-0000-00000000",
+                date="2013-02-01",
+                num_players=3,
+                is_tonpu=True,
+                is_processed=True,
+                was_error=False,
+                log=b"sample log data",
+            ),
+            db.LogEntry(
+                id="2023020101gm-00f1-0000-00000000",
+                date="2023-02-01",
+                num_players=3,
+                is_tonpu=True,
+                is_processed=False,
+                was_error=True,
+                log=b"invalid log data",
+            ),
+        ]
+
+        db.insert_log_entries(cursor, entries)
+        conn.commit()
+
+        actual = db.get_log_contents(cursor, None, None, None, 0)
+        expected = [b"sample log data"]
         assert actual == expected
     finally:
         conn.close()
