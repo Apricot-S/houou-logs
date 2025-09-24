@@ -21,6 +21,7 @@ from houou_logs.cli import (
     set_import_args,
     set_validate_args,
     set_yakuman_args,
+    validate_cli,
     yakuman_cli,
 )
 
@@ -159,6 +160,14 @@ def test_set_validate_args_with_options() -> None:
     args = parser.parse_args(["db.sqlite", "-y", "2024"])
     assert args.db_path == Path("db.sqlite")
     assert args.year == 2024
+
+
+@patch("houou_logs.validate.validate")
+def test_validate_cli_calls_validate(mock_validate: Mock) -> None:
+    mock_validate.return_value = (False, 1, 2)
+    args = Namespace(db_path=Path("db.sqlite"), year=2009)
+    validate_cli(args)
+    mock_validate.assert_called_once_with(Path("db.sqlite"), 2009)
 
 
 def test_set_export_args_without_options() -> None:

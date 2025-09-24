@@ -7,7 +7,7 @@ from argparse import ArgumentParser, Namespace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from houou_logs import download, export, fetch, import_, yakuman
+from houou_logs import download, export, fetch, import_, validate, yakuman
 from houou_logs.exceptions import UserInputError
 
 
@@ -150,6 +150,15 @@ def set_validate_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
+def validate_cli(args: Namespace) -> None:
+    were_errors, num_valid, total = validate.validate(args.db_path, args.year)
+    if not were_errors:
+        print(
+            f"Everything is fine, checked {num_valid}/{total}",
+            file=sys.stderr,
+        )
+
+
 def set_export_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "db_path",
@@ -223,6 +232,7 @@ def main() -> None:
 
     parser_validate = subparsers.add_parser("validate")
     parser_validate = set_validate_args(parser_validate)
+    parser_validate.set_defaults(func=validate_cli)
 
     parser_export = subparsers.add_parser("export")
     parser_export = set_export_args(parser_export)
