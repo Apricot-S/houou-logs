@@ -129,14 +129,33 @@ houou-logs download db/2024.db --players 3 --length h --limit 50
 
 ### Validate that downloaded logs can be parsed
 
+Validate that all downloaded mjlog XML in the database can be parsed correctly.
+
+This command performs the following checks:
+
+- Selects logs already marked as processed in the database.
+- Decompresses the stored gzip data and decodes it as UTF-8.
+- Confirms the content is non-empty.
+- Splits the log into game rounds by detecting INIT tags.
+- Skips non-essential tags (`SHUFFLE`, `TAIKYOKU`, `mjloggm`, `GO`).
+- Removes legacy `shuffle` attributes from `INIT` tags if present.
+- Groups tags into rounds until the game end (`owari`).
+- Marks logs as invalid and resets them for re-download if decompression, decoding, or parsing fails.
+- Displays progress with a bar and prints a summary of valid versus total logs at the end.
+
 ```sh
-houou-logs validate <db-path>
+houou-logs validate <db-path> [--year <YEAR>]
 ```
+
+Options:
+
+- `-y`, `--year <YEAR>`  
+  Validate only logs from the specified year. If omitted, all logs stored in the database are validated.
 
 Example:
 
 ```sh
-houou-logs validate db/2024.db
+houou-logs validate db/4p/hanchan.db --year 2024
 ```
 
 ### Export raw log contents (xml) from DB
