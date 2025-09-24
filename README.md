@@ -143,6 +143,8 @@ This command performs the following checks:
 - Marks logs as invalid and resets them for re-download if decompression, decoding, or parsing fails.
 - Displays progress with a bar and prints a summary of valid versus total logs at the end.
 
+In addition to validation, this command also serves as a practical example of how to parse mjlog XML at the tag level, which can be reused for custom analysis or tooling.
+
 ```sh
 houou-logs validate <db-path> [--year <YEAR>]
 ```
