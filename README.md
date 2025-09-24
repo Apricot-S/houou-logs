@@ -141,6 +141,11 @@ houou-logs validate db/2024.db
 
 ### Export raw log contents (xml) from DB
 
+Export downloaded log contents (mjlog in XML format) from the database into files.
+
+This command writes each log as an individual `.xml` file under the specified output directory.
+It skips logs that do not match the given conditions, and supports paging with `--limit` and `--offset` for batch processing.
+
 ```sh
 houou-logs export <db-path> <output-dir> [--players <PLAYERS>] [--length <LENGTH>] [--limit <LIMIT>] [--offset <OFFSET>]
 ```
