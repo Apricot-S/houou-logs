@@ -17,8 +17,8 @@ from houou_logs.session import TIMEOUT, create_session
 
 YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
 
-YKM_ARRAY_PATTERN = re.compile(r"ykm=(\[.*?\]);", re.DOTALL)
-
+YKM_ARRAY_PATTERN_NEW = re.compile(r"ykm=(\[.*?\]);", re.DOTALL)
+"""Format from February 2008"""
 
 def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
     if not (1 <= month <= 12):  # noqa: PLR2004
@@ -46,8 +46,8 @@ def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
     return res.content.decode("utf-8")
 
 
-def extract_ids(text: str) -> list[tuple[str, str]]:
-    match = YKM_ARRAY_PATTERN.search(text)
+def extract_ids_new_format(text: str) -> list[tuple[str, str]]:
+    match = YKM_ARRAY_PATTERN_NEW.search(text)
     if not match:
         msg = "ykm array not found in input text"
         raise RuntimeError(msg)
@@ -87,7 +87,7 @@ def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
             url = build_url(year, month)
             resp = fetch_yakuman_log_ids_text(session, url)
 
-            ids = extract_ids(resp)
+            ids = extract_ids_new_format(resp)
             entries = [parse_id(year, i[0], i[1]) for i in ids]
 
             db.insert_log_entries(cursor, entries)

@@ -11,7 +11,7 @@ from houou_logs.db import LogEntry
 from houou_logs.exceptions import UserInputError
 from houou_logs.yakuman import (
     build_url,
-    extract_ids,
+    extract_ids_new_format,
     parse_id,
     validate_yakuman_log_date,
 )
@@ -55,7 +55,7 @@ def test_build_url() -> None:
     assert build_url(2025, 1) == "https://tenhou.net/sc/2025/01/ykm.js"
 
 
-def test_extract_ids() -> None:
+def test_extract_ids_new_format() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ykm=['01/31 23:57','etra','[1,[12,14,15,116,118],[50794,47721,49674],12]',[39],'2025013123gm-0001-0000-12b924e3&tw=2&ts=4','01/31 23:40','åŽŸçˆ†','[137,[24,25,26,28,30,31,60,61,63,73,74,75,109,110],[],109]',[41],'2025013123gm-0089-0000-a148333d&tw=1&ts=9'];
@@ -65,19 +65,19 @@ sw();
         ("01/31 23:57", "2025013123gm-0001-0000-12b924e3"),
         ("01/31 23:40", "2025013123gm-0089-0000-a148333d"),
     ]
-    assert extract_ids(text) == ids
+    assert extract_ids_new_format(text) == ids
 
 
-def test_extract_ids_empty() -> None:
+def test_extract_ids_new_format_empty() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ykm=[];
 sw();
 """
-    assert extract_ids(text) == []
+    assert extract_ids_new_format(text) == []
 
 
-def test_extract_ids_raises_error_when_ykm_not_found() -> None:
+def test_extract_ids_new_format_raises_error_when_ykm_not_found() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ['01/31 23:57','etra','[1,[12,14,15,116,118],[50794,47721,49674],12]',[39],'2025013123gm-0001-0000-12b924e3&tw=2&ts=4','01/31 23:40','åŽŸçˆ†','[137,[24,25,26,28,30,31,60,61,63,73,74,75,109,110],[],109]',[41],'2025013123gm-0089-0000-a148333d&tw=1&ts=9'];
@@ -85,7 +85,7 @@ sw();
 """  # noqa: E501
 
     with pytest.raises(RuntimeError):
-        extract_ids(text)
+        extract_ids_new_format(text)
 
 
 def test_parse_id() -> None:
