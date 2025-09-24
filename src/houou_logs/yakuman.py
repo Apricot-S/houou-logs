@@ -54,7 +54,6 @@ def extract_ids(text: str) -> list[str]:
 def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
     validate_yakuman_log_date(year, month, now)
 
-    num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:
         db.setup_table(conn)
         cursor = conn.cursor()
@@ -67,6 +66,6 @@ def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
             entries = [parse_id(i) for i in ids]
 
             db.insert_log_entries(cursor, entries)
-            num_logs += len(entries)
+            num_logs = len(entries)
 
     return num_logs
