@@ -3,7 +3,6 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
-import sys
 from contextlib import closing
 from pathlib import Path
 
@@ -87,7 +86,7 @@ def download(
                 try:
                     content = fetch_log_content(session, url)
                 except Exception as e:  # noqa: BLE001
-                    print(f"{log_id}: {e}", file=sys.stderr)
+                    tqdm.write(f"{log_id}: {e}")
                     was_error = True
 
                 compressed_content = None
@@ -95,10 +94,7 @@ def download(
                     try:
                         compressed_content = gzip.compress(content)
                     except Exception as e:  # noqa: BLE001
-                        print(
-                            f"{log_id}: failed to compress: {e}",
-                            file=sys.stderr,
-                        )
+                        tqdm.write(f"{log_id}: failed to compress: {e}")
                         was_error = True
 
                 db.update_log_entries(

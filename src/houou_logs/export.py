@@ -3,7 +3,6 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
-import sys
 from contextlib import closing
 from pathlib import Path
 
@@ -66,7 +65,7 @@ def export(
             try:
                 content = gzip.decompress(compressed_content).decode("utf-8")
             except Exception as e:  # noqa: BLE001
-                print(f"{log_id}: failed to decompress: {e}", file=sys.stderr)
+                tqdm.write(f"{log_id}: failed to decompress: {e}")
                 num_logs -= 1
                 continue
 
