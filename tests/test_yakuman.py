@@ -11,7 +11,7 @@ from houou_logs.db import LogEntry
 from houou_logs.exceptions import UserInputError
 from houou_logs.yakuman import (
     build_url,
-    extract_ids_new_format,
+    extract_ids,
     parse_id,
     validate_yakuman_log_date,
 )
@@ -65,7 +65,7 @@ sw();
         ("01/31 23:57", "2025013123gm-0001-0000-12b924e3"),
         ("01/31 23:40", "2025013123gm-0089-0000-a148333d"),
     ]
-    assert extract_ids_new_format(text) == ids
+    assert extract_ids(text) == ids
 
 
 def test_extract_ids_new_format_empty() -> None:
@@ -74,7 +74,7 @@ updated="2025/02/01 00:12";
 ykm=[];
 sw();
 """
-    assert extract_ids_new_format(text) == []
+    assert extract_ids(text) == []
 
 
 def test_extract_ids_new_format_raises_error_when_ykm_not_found() -> None:
@@ -85,7 +85,7 @@ sw();
 """  # noqa: E501
 
     with pytest.raises(RuntimeError):
-        extract_ids_new_format(text)
+        extract_ids(text)
 
 
 def test_parse_id() -> None:
