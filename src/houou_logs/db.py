@@ -171,7 +171,7 @@ def get_log_contents(
     length: str | None,
     limit: int | None,
     offset: int,
-) -> list[bytes]:
+) -> list[tuple[str, bytes]]:
     conditions = ["is_processed = 1", "was_error = 0"]
     params: list = []
 
@@ -190,7 +190,7 @@ def get_log_contents(
                 raise ValueError(msg)
 
     sql = f"""
-        SELECT log
+        SELECT id, log
         FROM logs
         WHERE {" AND ".join(conditions)}
         ORDER BY id ASC
@@ -202,9 +202,7 @@ def get_log_contents(
         params.append(offset)
 
     cursor.execute(sql, params)
-    rows = cursor.fetchall()
-
-    return [row[0] for row in rows]
+    return cursor.fetchall()
 
 
 def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:

@@ -279,7 +279,7 @@ def test_get_log_contents() -> None:
         conn.commit()
 
         actual = db.get_log_contents(cursor, None, None, None, 0)
-        expected = [b"sample log data"]
+        expected = [("2013020101gm-00f1-0000-00000000", b"sample log data")]
         assert actual == expected
     finally:
         conn.close()
