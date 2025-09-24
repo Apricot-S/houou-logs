@@ -7,10 +7,12 @@ from datetime import UTC, datetime
 
 import pytest
 
+from houou_logs.db import LogEntry
 from houou_logs.exceptions import UserInputError
 from houou_logs.yakuman import (
     build_url,
     extract_ids,
+    parse_id,
     validate_yakuman_log_date,
 )
 
@@ -75,3 +77,21 @@ sw();
 
     with pytest.raises(RuntimeError):
         extract_ids(text)
+
+
+def test_parse_id() -> None:
+    year = 2025
+    date = "01/31 23:57"
+    log_id = "2025013123gm-0001-0000-12b924e3"
+
+    entry = LogEntry(
+        "2025013123gm-0001-0000-12b924e3",
+        "2025-01-31T23:57",
+        4,
+        is_tonpu=True,
+        is_processed=False,
+        was_error=False,
+        log=None,
+    )
+
+    assert parse_id(year, date, log_id) == entry

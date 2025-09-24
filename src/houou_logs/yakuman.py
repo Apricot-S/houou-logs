@@ -12,7 +12,7 @@ from requests import Session
 
 from houou_logs import db
 from houou_logs.exceptions import UserInputError
-from houou_logs.log_id import parse_id
+from houou_logs.log_id import parse_type
 from houou_logs.session import TIMEOUT, create_session
 
 YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
@@ -61,6 +61,21 @@ def extract_ids(text: str) -> list[tuple[str, str]]:
     ]
 
 
+def parse_id(year: int, date: str, log_id: str) -> db.LogEntry:
+    date = f"{year}-{date[0:2]}-{date[3:5]}T{date[6:8]}:{date[9:11]}"
+    num_players, is_tonpu = parse_type(log_id[13:17])
+
+    return db.LogEntry(
+        log_id,
+        date,
+        num_players,
+        is_tonpu,
+        is_processed=False,
+        was_error=False,
+        log=None,
+    )
+
+
 def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
     validate_yakuman_log_date(year, month, now)
 
@@ -73,7 +88,7 @@ def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
             resp = fetch_yakuman_log_ids_text(session, url)
 
             ids = extract_ids(resp)
-            entries = [parse_id(i[1]) for i in ids]
+            entries = [parse_id(year, i[0], i[1]) for i in ids]
 
             db.insert_log_entries(cursor, entries)
             num_logs = len(entries)
