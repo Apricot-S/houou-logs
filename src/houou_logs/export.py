@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
+import sys
 from contextlib import closing
 from pathlib import Path
 
@@ -61,7 +62,16 @@ def export(
             offset,
         )
 
-        for log_id, compressed_content in tqdm(logs_iter):
-            log_content = gzip.decompress(compressed_content).decode("utf-8")
+        for log_id, compressed_content in tqdm(logs_iter, total=num_logs):
+            try:
+                content = gzip.decompress(compressed_content).decode("utf-8")
+            except Exception as e:  # noqa: BLE001
+                print(f"{log_id}: failed to decompress: {e}", file=sys.stderr)
+                num_logs -= 1
+                continue
+
+            filename = (output_dir / log_id).with_suffix(".xml")
+            with filename.open("w") as f:
+                f.write(content)
 
     return num_logs
