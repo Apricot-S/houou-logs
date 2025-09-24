@@ -68,6 +68,15 @@ sw();
     assert extract_ids(text) == ids
 
 
+def test_extract_ids_empty() -> None:
+    text = """total=580570;
+updated="2025/02/01 00:12";
+ykm=[];
+sw();
+"""
+    assert extract_ids(text) == []
+
+
 def test_extract_ids_raises_error_when_ykm_not_found() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";

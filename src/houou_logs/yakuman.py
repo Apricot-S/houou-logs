@@ -62,7 +62,7 @@ def extract_ids(text: str) -> list[tuple[str, str]]:
 
 
 def parse_id(year: int, date: str, log_id: str) -> db.LogEntry:
-    date = f"{year}-{date[0:2]}-{date[3:5]}T{date[6:8]}:{date[9:11]}"
+    date = f"{year}-{date[0:2]}-{date[3:5]}T{date[6:11]}"
     num_players, is_tonpu = parse_type(log_id[13:17])
 
     return db.LogEntry(
