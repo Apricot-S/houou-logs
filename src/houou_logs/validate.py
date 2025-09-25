@@ -2,8 +2,14 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+from contextlib import closing
 from pathlib import Path
 
+from houou_logs import db
 
-def validate(db_path: Path, year: int | None) -> tuple[bool, int, int]:
+
+def validate(db_path: Path) -> tuple[bool, int, int]:
+    with closing(db.open_db(db_path)) as conn, conn:
+        cursor = conn.cursor()
+
     return (False, 0, 0)

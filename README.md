@@ -146,18 +146,13 @@ This command performs the following checks:
 In addition to validation, this command also serves as a practical example of how to parse mjlog XML at the tag level, which can be reused for custom analysis or tooling.
 
 ```sh
-houou-logs validate <db-path> [--year <YEAR>]
+houou-logs validate <db-path>
 ```
-
-Options:
-
-- `-y`, `--year <YEAR>`  
-  Validate only logs from the specified year. If omitted, all logs stored in the database are validated.
 
 Example:
 
 ```sh
-houou-logs validate db/4p/hanchan.db --year 2024
+houou-logs validate db/2024.db
 ```
 
 ### Export raw log contents (xml) from DB

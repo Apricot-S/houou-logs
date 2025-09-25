@@ -141,17 +141,11 @@ def set_validate_args(parser: ArgumentParser) -> ArgumentParser:
         help="Path to the SQLite database file.",
         metavar="db-path",
     )
-    parser.add_argument(
-        "-y",
-        "--year",
-        type=int,
-        help="Validate only logs from the specified year. If omitted, all logs stored in the database are validated.",  # noqa: E501
-    )
     return parser
 
 
 def validate_cli(args: Namespace) -> None:
-    were_errors, num_valid, total = validate.validate(args.db_path, args.year)
+    were_errors, num_valid, total = validate.validate(args.db_path)
     if not were_errors:
         print(
             f"Everything is fine, checked {num_valid}/{total}",
