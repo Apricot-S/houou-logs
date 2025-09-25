@@ -129,6 +129,10 @@ houou-logs download db/2024.db --players 3 --length h --limit 50
 
 ### Validate that downloaded logs can be parsed
 
+> 🚧 **Work in Progress**
+>
+> `validate` is currently in active development and not usable yet.
+
 Validate that all downloaded mjlog XML in the database can be parsed correctly.
 
 This command performs the following checks:
