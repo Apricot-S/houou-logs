@@ -41,7 +41,7 @@ def parse_type(log_type: str) -> tuple[int, bool]:
 
 
 def parse_id(time: str, log_id: str) -> LogEntry:
-    date = parse_date(time, log_id[0:10])
+    date = parse_date(time, log_id[0:8])
     num_players, is_tonpu = parse_type(log_id[13:17])
 
     return LogEntry(
