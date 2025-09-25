@@ -166,6 +166,20 @@ def update_log_entries(
     )
 
 
+def iter_all_log_contents(
+    cursor: sqlite3.Cursor,
+) -> Iterator[tuple[str, bytes]]:
+    cursor.execute(
+        """
+        SELECT id, log
+        FROM logs
+        WHERE is_processed = 1
+        ORDER BY id ASC
+        """,
+    )
+    yield from cursor
+
+
 def iter_log_contents(
     cursor: sqlite3.Cursor,
     players: int | None,

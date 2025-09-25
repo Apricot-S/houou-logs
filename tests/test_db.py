@@ -269,6 +269,16 @@ def test_update_log_entries() -> None:
         conn.close()
 
 
+def test_iter_all_log_contents(conn_test_db: sqlite3.Connection) -> None:
+    cursor = conn_test_db.cursor()
+    actual = list(db.iter_all_log_contents(cursor))
+    expected = [
+        ("2013020100gm-00f1-0000-00000000", b"broken log data"),
+        ("2013020101gm-00f1-0000-00000000", b"sample log data"),
+    ]
+    assert actual == expected
+
+
 def test_iter_log_contents(conn_test_db: sqlite3.Connection) -> None:
     cursor = conn_test_db.cursor()
     actual = list(db.iter_log_contents(cursor, None, None, None, 0))
