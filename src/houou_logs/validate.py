@@ -12,4 +12,6 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
     with closing(db.open_db(db_path)) as conn, conn:
         cursor = conn.cursor()
 
+        total_ids = db.count_all_ids(cursor)
+
     return (False, 0, 0)

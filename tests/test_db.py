@@ -282,6 +282,12 @@ def test_count_log_contents(conn_test_db: sqlite3.Connection) -> None:
     assert actual == 1
 
 
+def test_count_all_ids(conn_test_db: sqlite3.Connection) -> None:
+    cursor = conn_test_db.cursor()
+    actual = db.count_all_ids(cursor)
+    assert actual == 4
+
+
 def test_update_last_fetch_time() -> None:
     conn = db.open_db(":memory:")
 

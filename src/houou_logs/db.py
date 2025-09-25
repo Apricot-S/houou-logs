@@ -245,6 +245,11 @@ def count_log_contents(
     return cursor.fetchone()[0]
 
 
+def count_all_ids(cursor: sqlite3.Cursor) -> int:
+    cursor.execute("SELECT COUNT(*) from logs;")
+    return cursor.fetchone()[0]
+
+
 def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
     cursor.execute(
         """
