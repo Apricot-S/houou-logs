@@ -112,7 +112,7 @@ sw();
     assert extract_ids(text) == ids
 
 
-def test_parse_id() -> None:
+def test_parse_id_new_format() -> None:
     year = 2025
     date = "01/31 23:57"
     log_id = "2025013123gm-0001-0000-12b924e3"
@@ -120,6 +120,24 @@ def test_parse_id() -> None:
     entry = LogEntry(
         "2025013123gm-0001-0000-12b924e3",
         "2025-01-31T23:57",
+        4,
+        is_tonpu=True,
+        is_processed=False,
+        was_error=False,
+        log=None,
+    )
+
+    assert parse_id(year, date, log_id) == entry
+
+
+def test_parse_id_old_format() -> None:
+    year = 2006
+    date = "10/31 23:58"
+    log_id = "20061031gm-0001-0000-110c699e"
+
+    entry = LogEntry(
+        "20061031gm-0001-0000-110c699e",
+        "2006-10-31T23:58",
         4,
         is_tonpu=True,
         is_processed=False,
