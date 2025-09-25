@@ -2,11 +2,100 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import sqlite3
+from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from houou_logs import db
+
+
+@pytest.fixture
+def conn_test_db(tmp_path: Path) -> Generator[sqlite3.Connection, None, None]:
+    db_path = tmp_path / "test.db"
+    conn = sqlite3.connect(db_path, autocommit=False)
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS logs (
+            id TEXT PRIMARY KEY,
+            date TEXT NOT NULL,
+            num_players INTEGER NOT NULL CHECK(num_players IN (4, 3)),
+            is_tonpu INTEGER NOT NULL CHECK(is_tonpu IN (0, 1)),
+            is_processed INTEGER NOT NULL CHECK(is_processed IN (0, 1)),
+            was_error INTEGER NOT NULL CHECK(was_error IN (0, 1)),
+            log BLOB
+        ) WITHOUT ROWID;
+        """,
+    )
+
+    entries = [
+        db.LogEntry(
+            id="2009010100gm-00a9-0000-00000000",
+            date="2009-01-01",
+            num_players=4,
+            is_tonpu=False,
+            is_processed=False,
+            was_error=False,
+            log=None,
+        ),
+        db.LogEntry(
+            id="2013020100gm-00f1-0000-00000000",
+            date="2013-02-01",
+            num_players=3,
+            is_tonpu=True,
+            is_processed=True,
+            was_error=True,
+            log=b"broken log data",
+        ),
+        db.LogEntry(
+            id="2013020101gm-00f1-0000-00000000",
+            date="2013-02-01",
+            num_players=3,
+            is_tonpu=True,
+            is_processed=True,
+            was_error=False,
+            log=b"sample log data",
+        ),
+        db.LogEntry(
+            id="2023020101gm-00f1-0000-00000000",
+            date="2023-02-01",
+            num_players=3,
+            is_tonpu=True,
+            is_processed=False,
+            was_error=True,
+            log=b"invalid log data",
+        ),
+    ]
+
+    values = (
+        (
+            entry.id,
+            entry.date,
+            entry.num_players,
+            int(entry.is_tonpu),
+            int(entry.is_processed),
+            int(entry.was_error),
+            entry.log,
+        )
+        for entry in entries
+    )
+
+    conn.executemany(
+        """
+        INSERT INTO logs (id, date, num_players, is_tonpu, is_processed, was_error, log)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+        """,  # noqa: E501
+        values,
+    )
+    conn.commit()
+
+    yield conn
+
+    conn.close()
 
 
 def test_open_db_create_file(db_path: Path) -> None:
@@ -131,60 +220,11 @@ def test_insert_log_entries() -> None:
         conn.close()
 
 
-def test_get_undownloaded_log_ids() -> None:
-    conn = db.open_db(":memory:")
-
-    try:
-        db.setup_table(conn)
-        cursor = conn.cursor()
-
-        entries = [
-            db.LogEntry(
-                id="2009010100gm-00a9-0000-00000000",
-                date="2009-01-01",
-                num_players=4,
-                is_tonpu=False,
-                is_processed=False,
-                was_error=False,
-                log=None,
-            ),
-            db.LogEntry(
-                id="2013020100gm-00f1-0000-00000000",
-                date="2013-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=True,
-                was_error=True,
-                log=b"broken log data",
-            ),
-            db.LogEntry(
-                id="2013020101gm-00f1-0000-00000000",
-                date="2013-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=True,
-                was_error=False,
-                log=b"sample log data",
-            ),
-            db.LogEntry(
-                id="2023020101gm-00f1-0000-00000000",
-                date="2023-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=False,
-                was_error=True,
-                log=b"invalid log data",
-            ),
-        ]
-
-        db.insert_log_entries(cursor, entries)
-        conn.commit()
-
-        actual = db.get_undownloaded_log_ids(cursor, None, None, None)
-        expected = ["2009010100gm-00a9-0000-00000000"]
-        assert actual == expected
-    finally:
-        conn.close()
+def test_get_undownloaded_log_ids(conn_test_db: sqlite3.Connection) -> None:
+    cursor = conn_test_db.cursor()
+    actual = db.get_undownloaded_log_ids(cursor, None, None, None)
+    expected = ["2009010100gm-00a9-0000-00000000"]
+    assert actual == expected
 
 
 def test_update_log_entries() -> None:
@@ -229,115 +269,17 @@ def test_update_log_entries() -> None:
         conn.close()
 
 
-def test_iter_log_contents() -> None:
-    conn = db.open_db(":memory:")
-
-    try:
-        db.setup_table(conn)
-        cursor = conn.cursor()
-
-        entries = [
-            db.LogEntry(
-                id="2009010100gm-00a9-0000-00000000",
-                date="2009-01-01",
-                num_players=4,
-                is_tonpu=False,
-                is_processed=False,
-                was_error=False,
-                log=None,
-            ),
-            db.LogEntry(
-                id="2013020100gm-00f1-0000-00000000",
-                date="2013-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=True,
-                was_error=True,
-                log=b"broken log data",
-            ),
-            db.LogEntry(
-                id="2013020101gm-00f1-0000-00000000",
-                date="2013-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=True,
-                was_error=False,
-                log=b"sample log data",
-            ),
-            db.LogEntry(
-                id="2023020101gm-00f1-0000-00000000",
-                date="2023-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=False,
-                was_error=True,
-                log=b"invalid log data",
-            ),
-        ]
-
-        db.insert_log_entries(cursor, entries)
-        conn.commit()
-
-        actual = list(db.iter_log_contents(cursor, None, None, None, 0))
-        expected = [("2013020101gm-00f1-0000-00000000", b"sample log data")]
-        assert actual == expected
-    finally:
-        conn.close()
+def test_iter_log_contents(conn_test_db: sqlite3.Connection) -> None:
+    cursor = conn_test_db.cursor()
+    actual = list(db.iter_log_contents(cursor, None, None, None, 0))
+    expected = [("2013020101gm-00f1-0000-00000000", b"sample log data")]
+    assert actual == expected
 
 
-def test_count_log_contents() -> None:
-    conn = db.open_db(":memory:")
-
-    try:
-        db.setup_table(conn)
-        cursor = conn.cursor()
-
-        entries = [
-            db.LogEntry(
-                id="2009010100gm-00a9-0000-00000000",
-                date="2009-01-01",
-                num_players=4,
-                is_tonpu=False,
-                is_processed=False,
-                was_error=False,
-                log=None,
-            ),
-            db.LogEntry(
-                id="2013020100gm-00f1-0000-00000000",
-                date="2013-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=True,
-                was_error=True,
-                log=b"broken log data",
-            ),
-            db.LogEntry(
-                id="2013020101gm-00f1-0000-00000000",
-                date="2013-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=True,
-                was_error=False,
-                log=b"sample log data",
-            ),
-            db.LogEntry(
-                id="2023020101gm-00f1-0000-00000000",
-                date="2023-02-01",
-                num_players=3,
-                is_tonpu=True,
-                is_processed=False,
-                was_error=True,
-                log=b"invalid log data",
-            ),
-        ]
-
-        db.insert_log_entries(cursor, entries)
-        conn.commit()
-
-        actual = db.count_log_contents(cursor, None, None, None, 0)
-        assert actual == 1
-    finally:
-        conn.close()
+def test_count_log_contents(conn_test_db: sqlite3.Connection) -> None:
+    cursor = conn_test_db.cursor()
+    actual = db.count_log_contents(cursor, None, None, None, 0)
+    assert actual == 1
 
 
 def test_update_last_fetch_time() -> None:
