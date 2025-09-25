@@ -148,7 +148,7 @@ def validate_cli(args: Namespace) -> None:
     were_errors, num_valid, total = validate.validate(args.db_path)
     if not were_errors:
         print(
-            f"Everything is fine, checked {num_valid}/{total}",
+            f"Everything is fine, checked {num_valid}/{total} (valid logs / all IDs)",  # noqa: E501
             file=sys.stderr,
         )
 
