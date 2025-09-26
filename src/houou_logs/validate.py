@@ -3,19 +3,59 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
+import xml.etree.ElementTree as ET
 from contextlib import closing
 from pathlib import Path
 
 from tqdm import tqdm
 
 from houou_logs import db
+from houou_logs.download import validate_db_path
 
 
-def split_log_to_game_rounds(log_content: str) -> list:
-    return [""]
+def is_init_elem(elem: ET.Element) -> bool:
+    return elem.tag.upper() == "INIT"
+
+
+def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
+    root = ET.fromstring(log_content)  # noqa: S314
+    rounds: list[list[str]] = []
+    current_round_tags: list[str] = []
+
+    skip_tags = {"SHUFFLE", "TAIKYOKU", "mjloggm", "GO"}
+
+    for elem in root:
+        tagname = elem.tag.upper()
+
+        # スキップ対象
+        if tagname in skip_tags:
+            continue
+
+        # INIT タグが来たら新しいラウンド開始
+        if is_init_elem(elem) and current_round_tags:
+            rounds.append(current_round_tags)
+            current_round_tags = []
+
+        # owari タグでゲーム終了
+        if tagname.lower() == "owari":
+            current_round_tags.append(ET.tostring(elem, encoding="unicode"))
+            rounds.append(current_round_tags)
+            current_round_tags = []
+            continue
+
+        # shuffle属性を削除 旧ログ対応
+        if is_init_elem(elem) and "shuffle" in elem.attrib:
+            del elem.attrib["shuffle"]
+
+        # タグを文字列化して追加
+        current_round_tags.append(ET.tostring(elem, encoding="unicode"))
+
+    return rounds
 
 
 def validate(db_path: Path) -> tuple[bool, int, int]:
+    validate_db_path(db_path)
+
     with closing(db.open_db(db_path)) as conn, conn:
         cursor = conn.cursor()
 
