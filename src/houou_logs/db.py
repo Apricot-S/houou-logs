@@ -180,6 +180,17 @@ def iter_all_log_contents(
     yield from cursor
 
 
+def count_all_log_contents(cursor: sqlite3.Cursor) -> int:
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM logs
+        WHERE is_processed = 1
+        """,
+    )
+    return cursor.fetchone()[0]
+
+
 def iter_log_contents(
     cursor: sqlite3.Cursor,
     players: int | None,

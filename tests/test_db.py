@@ -279,6 +279,12 @@ def test_iter_all_log_contents(conn_test_db: sqlite3.Connection) -> None:
     assert actual == expected
 
 
+def test_count_all_log_contents(conn_test_db: sqlite3.Connection) -> None:
+    cursor = conn_test_db.cursor()
+    actual = db.count_all_log_contents(cursor)
+    assert actual == 2
+
+
 def test_iter_log_contents(conn_test_db: sqlite3.Connection) -> None:
     cursor = conn_test_db.cursor()
     actual = list(db.iter_log_contents(cursor, None, None, None, 0))

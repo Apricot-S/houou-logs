@@ -20,11 +20,12 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
         cursor = conn.cursor()
 
         num_ids = db.count_all_ids(cursor)
+        num_logs = db.count_all_log_contents(cursor)
         logs_iter = db.iter_all_log_contents(cursor)
 
         were_errors = False
         num_valid_logs = 0
-        for log_id, compressed_content in tqdm(logs_iter):
+        for log_id, compressed_content in tqdm(logs_iter, total=num_logs):
             was_error = False
 
             content = None
