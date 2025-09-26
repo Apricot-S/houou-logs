@@ -304,6 +304,44 @@ def test_count_all_ids(conn_test_db: sqlite3.Connection) -> None:
     assert actual == 4
 
 
+def test_reset_log_content() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        log_id = "2009010100gm-00a9-0000-00000000"
+        entry = db.LogEntry(
+            id=log_id,
+            date="2009-01-01",
+            num_players=4,
+            is_tonpu=False,
+            is_processed=False,
+            was_error=False,
+            log=None,
+        )
+        db.insert_log_entries(cursor, [entry])
+        db.update_log_entries(cursor, entry.id, True, b"sample")  # noqa: FBT003
+        conn.commit()
+
+        db.reset_log_content(cursor, log_id)
+
+        cursor.execute("SELECT * FROM logs;")
+        expected = (
+            entry.id,
+            entry.date,
+            entry.num_players,
+            entry.is_tonpu,
+            0,
+            0,
+            None,
+        )
+        assert cursor.fetchone() == expected
+    finally:
+        conn.close()
+
+
 def test_update_last_fetch_time() -> None:
     conn = db.open_db(":memory:")
 

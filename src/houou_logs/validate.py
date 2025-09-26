@@ -56,5 +56,6 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
                 tqdm.write(
                     "Invalid log content detected. Reset to unprocessed.",
                 )
+                db.reset_log_content(cursor, log_id)
 
     return (were_errors, num_valid_logs, num_ids)
