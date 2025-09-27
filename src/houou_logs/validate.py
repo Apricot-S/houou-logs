@@ -38,7 +38,7 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
 
                 # shuffle属性を削除 旧ログ対応
                 elem.attrib.pop("shuffle", None)
-            case "owari":
+            case "AGARI" | "RYUUKYOKU" if "owari" in elem.attrib:
                 # owari タグでゲーム終了
                 current_round.append(ET.tostring(elem, encoding="unicode"))
                 rounds.append(current_round)
@@ -48,7 +48,7 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
         # タグを文字列化して追加
         current_round.append(ET.tostring(elem, encoding="unicode"))
 
-    # pprint([rounds])  # 開発中確認用
+    pprint([rounds])  # 開発中確認用
     return rounds
 
 
