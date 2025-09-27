@@ -18,11 +18,11 @@ SKIP_TAGS = {"SHUFFLE", "TAIKYOKU", "GO"}
 
 def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
     root = ET.fromstring(log_content)  # noqa: S314
-    rounds: list[list[str]] = []
-    current_round: list[str] = []
-
     if root.tag != "mjloggm":
         return []
+
+    rounds: list[list[str]] = []
+    current_round: list[str] = []
 
     for elem in root:
         match elem.tag:
