@@ -13,22 +13,30 @@ from tqdm import tqdm
 from houou_logs import db
 from houou_logs.download import validate_db_path
 
-SKIP_TAGS = {"SHUFFLE", "TAIKYOKU", "GO"}
-
 
 def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
     root = ET.fromstring(log_content)  # noqa: S314
     if root.tag != "mjloggm":
-        return []
+        msg = "invalid root tag, expected <mjloggm>"
+        raise ValueError(msg)
 
     rounds: list[list[str]] = []
     current_round: list[str] = []
+    game_ended = False
 
     for elem in root:
-        match elem.tag:
-            case tagname if tagname in SKIP_TAGS:
-                # スキップ対象
-                continue
+        tagname = elem.tag
+
+        if game_ended and tagname not in ("UN", "BYE"):
+            # owari後に許容されるのは回線切断(BYE)と復帰(UN)のみ
+            msg = f"unexpected element <{tagname}> after game end"
+            raise ValueError(msg)
+
+        if tagname in ("SHUFFLE", "TAIKYOKU", "GO"):
+            # スキップ対象
+            continue
+
+        match tagname:
             case "INIT":
                 # INIT タグが来たら新しいラウンド開始
                 if current_round:
@@ -39,16 +47,21 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
                 # shuffle属性を削除 旧ログ対応
                 elem.attrib.pop("shuffle", None)
             case "AGARI" | "RYUUKYOKU" if "owari" in elem.attrib:
-                # owari タグでゲーム終了
+                # owari 属性がある場合はゲーム終了
                 current_round.append(ET.tostring(elem, encoding="unicode"))
                 rounds.append(current_round)
                 current_round = []
+                game_ended = True
                 continue
 
-        # タグを文字列化して追加
+        # 要素を文字列化して追加
         current_round.append(ET.tostring(elem, encoding="unicode"))
 
-    pprint([rounds])  # 開発中確認用
+    if not game_ended:
+        msg = "log ended without 'owari' attribute"
+        raise ValueError(msg)
+
+    pprint(rounds)  # 開発中確認用、あとで削除する
     return rounds
 
 
