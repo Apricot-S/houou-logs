@@ -171,7 +171,7 @@ Example:
 houou-logs export db/2024.db xml/2024/4p/tonpu --players 4 --length t --limit 100 --offset 50
 ```
 
-## Credits
+## Acknowledgments
 
 This project is heavily inspired by:
 
