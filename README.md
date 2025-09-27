@@ -129,25 +129,9 @@ houou-logs download db/2024.db --players 3 --length h --limit 50
 
 ### Validate that downloaded logs can be parsed
 
-> 🚧 **Work in Progress**
->
-> `validate` is currently in active development and not usable yet.
-
 Validate that all downloaded mjlog XML in the database can be parsed correctly.
 
-This command performs the following checks:
-
-- Selects logs already marked as processed in the database.
-- Decompresses the stored gzip data and decodes it as UTF-8.
-- Confirms the content is non-empty.
-- Splits the log into game rounds by detecting INIT tags.
-- Skips non-essential tags (`SHUFFLE`, `TAIKYOKU`, `mjloggm`, `GO`).
-- Removes legacy `shuffle` attributes from `INIT` tags if present.
-- Groups tags into rounds until the game end (`owari`).
-- Marks logs as invalid and resets them for re-download if decompression, decoding, or parsing fails.
-- Displays progress with a bar and prints a summary of valid versus total logs at the end.
-
-In addition to validation, this command also serves as a practical example of how to parse mjlog XML at the tag level, which can be reused for custom analysis or tooling.
+In addition to validation, this command also serves as a practical example of how to parse mjlog XML at the tag level.
 
 ```sh
 houou-logs validate <db-path>
