@@ -6,7 +6,6 @@ import gzip
 import xml.etree.ElementTree as ET
 from contextlib import closing
 from pathlib import Path
-from pprint import pprint
 
 from tqdm import tqdm
 
@@ -28,40 +27,41 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
         tagname = elem.tag
 
         if game_ended and tagname not in ("UN", "BYE"):
-            # owari後に許容されるのは回線切断(BYE)と復帰(UN)のみ
+            # After game end, only connection-related tags (UN/BYE)
+            # are allowed.
             msg = f"unexpected element <{tagname}> after game end"
             raise ValueError(msg)
 
         if tagname in ("SHUFFLE", "TAIKYOKU", "GO"):
-            # スキップ対象
+            # Skip tags that are not part of round content
             continue
 
-        match tagname:
-            case "INIT":
-                # INIT タグが来たら新しいラウンド開始
-                if current_round:
-                    # 前ラウンドを閉じる
-                    rounds.append(current_round)
-                    current_round = []
-
-                # shuffle属性を削除 旧ログ対応
-                elem.attrib.pop("shuffle", None)
-            case "AGARI" | "RYUUKYOKU" if "owari" in elem.attrib:
-                # owari 属性がある場合はゲーム終了
-                current_round.append(ET.tostring(elem, encoding="unicode"))
+        if tagname == "INIT":
+            # A new round starts at INIT.
+            if current_round:
+                # If there is an ongoing round, close it first.
                 rounds.append(current_round)
                 current_round = []
-                game_ended = True
-                continue
 
-        # 要素を文字列化して追加
+            # Remove legacy 'shuffle' attribute if present
+            elem.attrib.pop("shuffle", None)
+
+        if tagname in ("AGARI", "RYUUKYOKU") and "owari" in elem.attrib:
+            # Game ends when 'owari' attribute is present.
+            current_round.append(ET.tostring(elem, encoding="unicode"))
+            rounds.append(current_round)
+            current_round = []
+            game_ended = True
+            continue
+
+        # Append the element to the current round
         current_round.append(ET.tostring(elem, encoding="unicode"))
 
     if not game_ended:
+        # If no 'owari' was found, the log is incomplete
         msg = "log ended without 'owari' attribute"
         raise ValueError(msg)
 
-    pprint(rounds)  # 開発中確認用、あとで削除する
     return rounds
 
 
