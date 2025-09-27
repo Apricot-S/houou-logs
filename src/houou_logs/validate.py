@@ -6,50 +6,50 @@ import gzip
 import xml.etree.ElementTree as ET
 from contextlib import closing
 from pathlib import Path
+from pprint import pprint
 
 from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.download import validate_db_path
 
-
-def is_init_elem(elem: ET.Element) -> bool:
-    return elem.tag.upper() == "INIT"
+SKIP_TAGS = {"SHUFFLE", "TAIKYOKU", "GO"}
 
 
 def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
     root = ET.fromstring(log_content)  # noqa: S314
     rounds: list[list[str]] = []
-    current_round_tags: list[str] = []
+    current_round: list[str] = []
 
-    skip_tags = {"SHUFFLE", "TAIKYOKU", "mjloggm", "GO"}
+    if root.tag != "mjloggm":
+        return []
 
     for elem in root:
-        tagname = elem.tag.upper()
+        match elem.tag:
+            case tagname if tagname in SKIP_TAGS:
+                # スキップ対象
+                continue
+            case "INIT":
+                # INIT タグが来たら新しいラウンド開始
+                if current_round:
+                    # 前ラウンドを閉じる
+                    rounds.append(current_round)
+                    current_round = []
 
-        # スキップ対象
-        if tagname in skip_tags:
-            continue
-
-        # INIT タグが来たら新しいラウンド開始
-        if is_init_elem(elem) and current_round_tags:
-            rounds.append(current_round_tags)
-            current_round_tags = []
-
-        # owari タグでゲーム終了
-        if tagname.lower() == "owari":
-            current_round_tags.append(ET.tostring(elem, encoding="unicode"))
-            rounds.append(current_round_tags)
-            current_round_tags = []
-            continue
-
-        # shuffle属性を削除 旧ログ対応
-        if is_init_elem(elem) and "shuffle" in elem.attrib:
-            del elem.attrib["shuffle"]
+                if "shuffle" in elem.attrib:
+                    # shuffle属性を削除 旧ログ対応
+                    del elem.attrib["shuffle"]
+            case "owari":
+                # owari タグでゲーム終了
+                current_round.append(ET.tostring(elem, encoding="unicode"))
+                rounds.append(current_round)
+                current_round = []
+                continue
 
         # タグを文字列化して追加
-        current_round_tags.append(ET.tostring(elem, encoding="unicode"))
+        current_round.append(ET.tostring(elem, encoding="unicode"))
 
+    # pprint([rounds])  # 開発中確認用
     return rounds
 
 
