@@ -15,6 +15,10 @@ Tools to download Houou (Phoenix) logs from tenhou.net
 > - <https://tenhou.net/sc/raw/>
 > - <https://x.com/tsuno_s/status/1804487739657580636>
 
+## Implementation concept diagram
+
+![implementation-concept-diagram](docs/implementation-concept-diagram.svg)
+
 ## Installation
 
 ```sh

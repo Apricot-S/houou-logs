@@ -1,0 +1,91 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0" version="28.2.5">
+  <diagram name="houou-logs" id="houou-logs-diagram">
+    <mxGraphModel dx="773" dy="1002" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="tenhou" value="Tenhou Server&#xa;(tenhou.net)" style="shape=cloud;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="100" y="20" width="560" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="zip" value="Manual ZIP Download&#xa;e.g., scraw2009.zip" style="shape=rectangle;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="300" y="120" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="import" value="&lt;div&gt;import&lt;/div&gt;- scraw{year}.zip&lt;br&gt;(Insert log IDs from ZIP)" style="shape=rectangle;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="300" y="200" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="fetch" value="fetch&lt;br&gt;- sc/raw/list.cgi (last 7 days)&lt;br&gt;- sc/raw/list.cgi?old (Jan 1 to 7 days ago)&lt;br&gt;(Insert log IDs from list.cgi)" style="shape=rectangle;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="50" y="200" width="230" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="yakuman" value="yakuman&lt;br&gt;- sc/{year}/{month}/ykm.js&lt;br&gt;(Insert log IDs from ykm.js)" style="shape=rectangle;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="520" y="200" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="db" value="&lt;br&gt;&lt;div&gt;Database&lt;/div&gt;(SQLite)" style="shape=cylinder;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="300" y="320" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="download" value="download&#xa;- 0/log/?{log_id}&#xa;(Store mjlog into DB)" style="shape=rectangle;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="80" y="440" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="validate" value="validate&#xa;(Check if mjlog XML can be parsed)" style="shape=rectangle;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="300" y="440" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="export" value="export&#xa;(Output mjlog as XML files)" style="shape=rectangle;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="520" y="440" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;" parent="1" source="tenhou" target="zip" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1b" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;exitX=0.241;exitY=0.833;exitDx=0;exitDy=0;exitPerimeter=0;" parent="1" source="tenhou" target="fetch" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1c" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;exitX=0.778;exitY=0.867;exitDx=0;exitDy=0;exitPerimeter=0;" parent="1" source="tenhou" target="yakuman" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;" parent="1" source="zip" target="import" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;" parent="1" source="import" target="db" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;" parent="1" source="fetch" target="db" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;" parent="1" source="yakuman" target="db" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;dashed=1;" parent="1" source="db" target="download" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;" parent="1" source="db" target="validate" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;" parent="1" source="db" target="export" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="export" target="ikNuFjEyCK6dklWUukHm-3" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="540" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ikNuFjEyCK6dklWUukHm-1" value="" style="curved=1;endArrow=classic;html=1;rounded=0;exitX=0.13;exitY=0.77;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="tenhou" target="download">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="380" y="540" as="sourcePoint" />
+            <mxPoint x="430" y="490" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="30" y="120" />
+              <mxPoint x="20" y="360" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ikNuFjEyCK6dklWUukHm-2" style="edgeStyle=orthogonalConnector;rounded=0;endArrow=block;exitX=0.562;exitY=-0.044;exitDx=0;exitDy=0;exitPerimeter=0;" edge="1" parent="1" source="download">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="302" y="360" as="sourcePoint" />
+            <mxPoint x="290" y="380" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ikNuFjEyCK6dklWUukHm-3" value="XML Files&lt;br&gt;(exported mjlog)" style="strokeWidth=2;html=1;shape=mxgraph.flowchart.multi-document;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="535" y="540" width="170" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
