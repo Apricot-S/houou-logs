@@ -42,14 +42,14 @@ dev = [
     { include-group = "typing" },
 ]
 lint = [
-    "ruff>=0.14.0,<0.15",
+    "ruff>=0.14.6,<0.15",
 ]
 test = [
     "pytest>=8.4.2,<9",
     "tzdata>=2025.2",
 ]
 typing = [
-    "mypy>=1.18.1,<2",
+    "mypy>=1.18.2,<2",
     "types-requests>=2.32.4.20250913",
     "types-tqdm>=4.67.0.20250809",
 ]
