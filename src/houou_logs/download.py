@@ -44,7 +44,13 @@ def build_url(log_id: str) -> str:
 
 def fetch_log_content(session: Session, url: str) -> bytes:
     resp = session.get(url, timeout=TIMEOUT)
-    if "mjlog" not in resp.text:
+    text = resp.text
+
+    if text is None:
+        msg = "response text is None (failed to decode or empty response)"
+        raise RuntimeError(msg)
+
+    if "mjlog" not in text:
         msg = "no log content in response"
         raise RuntimeError(msg)
 
