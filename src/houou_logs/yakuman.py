@@ -8,7 +8,7 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
-from requests import Session
+from niquests import Session
 
 from houou_logs import db
 from houou_logs.exceptions import UserInputError

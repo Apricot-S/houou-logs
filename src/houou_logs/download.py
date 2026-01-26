@@ -6,7 +6,7 @@ import gzip
 from contextlib import closing
 from pathlib import Path
 
-from requests import Session
+from niquests import Session
 from tqdm import tqdm
 
 from houou_logs import db

@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from unittest.mock import Mock
 
 import pytest
-from requests import Response, Session
-from requests.exceptions import HTTPError
+from niquests import Response, Session
+from niquests.exceptions import HTTPError
 
 from houou_logs.fetch import (
     exclude_unchanged_files,

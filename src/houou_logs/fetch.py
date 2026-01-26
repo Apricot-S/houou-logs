@@ -8,7 +8,7 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import requests
+import niquests
 from tqdm import tqdm
 
 from houou_logs import db
@@ -35,7 +35,7 @@ def should_fetch(
     return now - last_fetch_time > MIN_FETCH_INTERVAL
 
 
-def fetch_file_index_text(session: requests.Session, url: str) -> str:
+def fetch_file_index_text(session: niquests.Session, url: str) -> str:
     res = session.get(url, timeout=TIMEOUT)
     res.raise_for_status()
     return res.text
