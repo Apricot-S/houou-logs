@@ -8,9 +8,9 @@ bring it to our attention by posting an issue.
 
 The attached notices are provided for information only.
 
-## Requests
+## Niquests
 
-**Source**: <https://github.com/psf/requests>
+**Source**: <https://github.com/jawah/niquests>
 
 **Notice**:
 
