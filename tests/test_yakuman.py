@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
-
 from datetime import UTC, datetime
 
 import pytest
