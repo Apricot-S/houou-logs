@@ -38,7 +38,13 @@ def should_fetch(
 def fetch_file_index_text(session: niquests.Session, url: str) -> str:
     res = session.get(url, timeout=TIMEOUT)
     res.raise_for_status()
-    return res.text
+
+    text = res.text
+    if text is None:
+        msg = "response text is None"
+        raise RuntimeError(msg)
+
+    return text
 
 
 def parse_file_index(response: str) -> dict[str, int]:
