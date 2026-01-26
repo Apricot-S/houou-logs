@@ -1,6 +1,6 @@
 [project]
 name = "houou-logs"
-version = "1.0.3"
+version = "1.0.4"
 description = "Tools to download Houou (Phoenix) logs from tenhou.net"
 authors = [
     { name = "Apricot S." }
@@ -21,7 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "requests>=2.32.5,<3",
+    "niquests>=3.17.0,<4",
     "tqdm>=4.67.1,<5",
 ]
 
@@ -50,7 +50,6 @@ test = [
 ]
 typing = [
     "mypy>=1.18.2,<2",
-    "types-requests>=2.32.4.20250913",
     "types-tqdm>=4.67.0.20250809",
 ]
 
