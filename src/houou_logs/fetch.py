@@ -96,7 +96,12 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 url = f"{LOG_DOWNLOAD_URL}{filename}"
                 page = session.get(url, timeout=TIMEOUT)
 
-                with io.BytesIO(page.content) as f:
+                content = page.content
+                if content is None:
+                    msg = "response content is None"
+                    raise RuntimeError(msg)
+
+                with io.BytesIO(content) as f:
                     entries = extract_log_entries(filename, f)
 
                 db.insert_log_entries(cursor, entries)
