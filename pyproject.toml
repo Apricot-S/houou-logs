@@ -1,6 +1,6 @@
 [project]
 name = "houou-logs"
-version = "1.0.4"
+version = "1.0.5"
 description = "Tools to download Houou (Phoenix) logs from tenhou.net"
 authors = [
     { name = "Apricot S." }
@@ -32,7 +32,7 @@ houou-logs = "houou_logs.cli:main"
 Repository = "https://github.com/Apricot-S/houou-logs.git"
 
 [build-system]
-requires = ["uv_build>=0.8.17,<0.10.0"]
+requires = ["uv_build>=0.8.17,<0.11.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
@@ -42,7 +42,7 @@ dev = [
     { include-group = "typing" },
 ]
 lint = [
-    "ruff>=0.14.6,<0.15",
+    "ruff>=0.15.0,<0.16",
 ]
 test = [
     "pytest>=9.0.1,<10",
