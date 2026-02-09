@@ -42,7 +42,7 @@ dev = [
     { include-group = "typing" },
 ]
 lint = [
-    "ruff>=0.14.6,<0.15",
+    "ruff>=0.15.0,<0.16",
 ]
 test = [
     "pytest>=9.0.1,<10",
