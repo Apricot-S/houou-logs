@@ -114,7 +114,7 @@ def test_yakuman_cli_warns_yakuman_for_current_month(
 ) -> None:
     now = datetime(2025, 9, 23, 1, 52, 12, 0, UTC)
     mock_datetime.now.return_value = now
-    mock_datetime.side_effect = lambda *a, **kw: datetime(*a, **kw)  # noqa: DTZ001
+    mock_datetime.side_effect = datetime
     args = Namespace(db_path=Path("db.sqlite"), year=2025, month=9)
     yakuman_cli(args)
     captured = capsys.readouterr()
