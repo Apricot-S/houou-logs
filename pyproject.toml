@@ -54,7 +54,6 @@ typing = [
 ]
 
 [tool.ruff]
-target-version = "py312"
 src = ["src"]
 extend-exclude = ["env"]
 line-length = 79
