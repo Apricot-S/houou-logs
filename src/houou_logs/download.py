@@ -6,6 +6,7 @@ import gzip
 from contextlib import closing
 from pathlib import Path
 
+import niquests
 from niquests import Session
 from tqdm import tqdm
 
@@ -44,8 +45,11 @@ def build_url(log_id: str) -> str:
 
 def fetch_log_content(session: Session, url: str) -> bytes:
     resp = session.get(url, timeout=TIMEOUT)
-    text = resp.text
+    if resp.status_code != niquests.codes["ok"]:
+        msg = f"failed to fetch: HTTP {resp.status_code}"
+        raise RuntimeError(msg)
 
+    text = resp.text
     if text is None:
         msg = "response text is None (failed to decode or empty response)"
         raise RuntimeError(msg)
