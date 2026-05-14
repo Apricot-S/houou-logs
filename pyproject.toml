@@ -50,7 +50,7 @@ test = [
 ]
 typing = [
     "ty>=0.0.34",
-    "types-tqdm>=4.67.0.20250809",
+    "types-tqdm>=4.67.3.20260508",
 ]
 
 [tool.ruff]
