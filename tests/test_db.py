@@ -182,6 +182,27 @@ def test_setup_table_creates_file_index_table() -> None:
         conn.close()
 
 
+def test_setup_table_creates_logs_status_filter_index() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+
+        cursor = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='index'
+                AND name='idx_logs_status_filter';
+            """,
+        )
+        index = cursor.fetchone()
+        assert index is not None
+        assert index[0] == "idx_logs_status_filter"
+    finally:
+        conn.close()
+
+
 def test_insert_log_entries() -> None:
     conn = db.open_db(":memory:")
 
