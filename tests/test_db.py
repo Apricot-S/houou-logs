@@ -269,6 +269,24 @@ def test_update_log_entries() -> None:
         conn.close()
 
 
+def test_update_log_entries_rejects_missing_id() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        with pytest.raises(RuntimeError, match="log entry not found"):
+            db.update_log_entries(
+                cursor,
+                "2009010100gm-00a9-0000-00000000",
+                True,  # noqa: FBT003
+                b"sample",
+            )
+    finally:
+        conn.close()
+
+
 def test_iter_all_log_contents(conn_test_db: sqlite3.Connection) -> None:
     cursor = conn_test_db.cursor()
     actual = list(db.iter_all_log_contents(cursor))
