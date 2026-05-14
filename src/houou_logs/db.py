@@ -159,13 +159,16 @@ def update_log_entries(
     was_error: bool,  # noqa: FBT001
     log: bytes | None,
 ) -> None:
-    cursor.execute(
+    result = cursor.execute(
         """
         UPDATE logs SET is_processed = 1, was_error = ?, log = ?
         WHERE id = ?;
         """,
         (int(was_error), log, log_id),
     )
+    if result.rowcount != 1:
+        msg = f"log entry not found: {log_id}"
+        raise RuntimeError(msg)
 
 
 def iter_all_log_contents(
