@@ -70,7 +70,7 @@ def export(
                 continue
 
             filename = (output_dir / log_id).with_suffix(".xml")
-            with filename.open("w") as f:
+            with filename.open("w", encoding="utf-8") as f:
                 f.write(content)
 
     return num_logs
