@@ -70,6 +70,7 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
 
     with closing(db.open_db(db_path)) as conn, conn:
         cursor = conn.cursor()
+        write_cursor = conn.cursor()
 
         num_ids = db.count_all_ids(cursor)
         num_logs = db.count_all_log_contents(cursor)
@@ -108,6 +109,6 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
                 tqdm.write(
                     "Invalid log content detected. Reset to unprocessed.",
                 )
-                db.reset_log_content(cursor, log_id)
+                db.reset_log_content(write_cursor, log_id)
 
     return (were_errors, num_valid_logs, num_ids)
