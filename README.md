@@ -112,6 +112,9 @@ Download the log contents (mjlog) into the database using previously fetched log
 
 This command skips logs that are already downloaded and stored, and only fetches log contents for undownloaded IDs that match the specified conditions.
 
+If a log cannot be downloaded, the entry is still marked as processed with an error flag.
+Such entries are skipped by later `download` runs unless they are reset to the undownloaded state.
+
 ```sh
 houou-logs download <db-path> [--players <PLAYERS>] [--length <LENGTH>] [--limit <LIMIT>]
 ```
@@ -134,6 +137,9 @@ houou-logs download db/2024.db --players 3 --length h --limit 50
 ### Validate that downloaded logs can be parsed
 
 Validate that all downloaded mjlog XML in the database can be parsed correctly.
+
+If an invalid or unreadable log is found, this command resets that log entry to the undownloaded state.
+This allows a later `download` run to fetch it again.
 
 In addition to validation, this command also serves as a practical example of how to parse mjlog XML at the tag level.
 
