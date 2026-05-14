@@ -12,6 +12,8 @@ from tqdm import tqdm
 from houou_logs import db
 from houou_logs.download import validate_db_path
 
+VALIDATE_BATCH_SIZE = 1000
+
 
 def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
     root = ET.fromstring(log_content)  # noqa: S314
@@ -73,41 +75,60 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
 
         num_ids = db.count_all_ids(cursor)
         num_logs = db.count_all_log_contents(cursor)
-        logs_iter = db.iter_all_log_contents(cursor)
-
         were_errors = False
         num_valid_logs = 0
-        for log_id, compressed_content in tqdm(logs_iter, total=num_logs):
-            was_error = False
+        last_id = None
 
-            content = None
-            try:
-                content = gzip.decompress(compressed_content).decode("utf-8")
-            except Exception as e:  # noqa: BLE001
-                tqdm.write(f"{log_id}: failed to decompress: {e}")
-                was_error = True
-
-            if not content:
-                was_error = True
-
-            parsed_rounds = None
-            try:
-                if content:
-                    parsed_rounds = split_log_to_game_rounds(content)
-            except Exception as e:  # noqa: BLE001
-                tqdm.write(f"{log_id}: failed to parse: {e}")
-                was_error = True
-
-            if parsed_rounds:
-                num_valid_logs += 1
-            else:
-                was_error = True
-
-            if was_error:
-                were_errors = True
-                tqdm.write(
-                    "Invalid log content detected. Reset to unprocessed.",
+        with tqdm(total=num_logs) as progress:
+            while True:
+                log_ids = db.list_all_processed_log_ids_after(
+                    cursor,
+                    last_id,
+                    VALIDATE_BATCH_SIZE,
                 )
-                db.reset_log_content(cursor, log_id)
+                if not log_ids:
+                    break
+
+                last_id = log_ids[-1]
+
+                for log_id in log_ids:
+                    was_error = False
+
+                    compressed_content = db.get_log_content(cursor, log_id)
+                    content = None
+                    try:
+                        if compressed_content is not None:
+                            decompressed = gzip.decompress(compressed_content)
+                            content = decompressed.decode("utf-8")
+                    except Exception as e:  # noqa: BLE001
+                        tqdm.write(f"{log_id}: failed to decompress: {e}")
+                        was_error = True
+
+                    if not content:
+                        was_error = True
+
+                    parsed_rounds = None
+                    try:
+                        if content:
+                            parsed_rounds = split_log_to_game_rounds(content)
+                    except Exception as e:  # noqa: BLE001
+                        tqdm.write(f"{log_id}: failed to parse: {e}")
+                        was_error = True
+
+                    if parsed_rounds:
+                        num_valid_logs += 1
+                    else:
+                        was_error = True
+
+                    if was_error:
+                        were_errors = True
+                        msg = (
+                            "Invalid log content detected. "
+                            "Reset to unprocessed."
+                        )
+                        tqdm.write(msg)
+                        db.reset_log_content(cursor, log_id)
+
+                    progress.update(1)
 
     return (were_errors, num_valid_logs, num_ids)
