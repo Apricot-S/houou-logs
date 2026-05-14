@@ -193,6 +193,53 @@ def count_all_log_contents(cursor: sqlite3.Cursor) -> int:
     return cursor.fetchone()[0]
 
 
+def list_all_processed_log_ids_after(
+    cursor: sqlite3.Cursor,
+    after_id: str | None,
+    limit: int,
+) -> list[str]:
+    if after_id is None:
+        cursor.execute(
+            """
+            SELECT id
+            FROM logs
+            WHERE is_processed = 1
+            ORDER BY id ASC
+            LIMIT ?;
+            """,
+            (limit,),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT id
+            FROM logs
+            WHERE is_processed = 1
+                AND id > ?
+            ORDER BY id ASC
+            LIMIT ?;
+            """,
+            (after_id, limit),
+        )
+
+    return [row[0] for row in cursor.fetchall()]
+
+
+def get_log_content(cursor: sqlite3.Cursor, log_id: str) -> bytes | None:
+    cursor.execute(
+        """
+        SELECT log
+        FROM logs
+        WHERE id = ?;
+        """,
+        (log_id,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return row[0]
+
+
 def iter_log_contents(
     cursor: sqlite3.Cursor,
     players: int | None,

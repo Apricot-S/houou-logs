@@ -3,7 +3,9 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
+import sqlite3
 import xml.etree.ElementTree as ET
+from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
@@ -11,6 +13,26 @@ from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.download import validate_db_path
+
+VALIDATE_BATCH_SIZE = 1000
+
+
+def iter_processed_log_id_batches(
+    cursor: sqlite3.Cursor,
+    batch_size: int,
+) -> Iterator[list[str]]:
+    last_id = None
+    while True:
+        log_ids = db.list_all_processed_log_ids_after(
+            cursor,
+            last_id,
+            batch_size,
+        )
+        if not log_ids:
+            break
+
+        last_id = log_ids[-1]
+        yield log_ids
 
 
 def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
@@ -65,6 +87,31 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
     return rounds
 
 
+def is_valid_log_content(
+    log_id: str,
+    compressed_content: bytes | None,
+) -> bool:
+    content = None
+    try:
+        if compressed_content is not None:
+            decompressed = gzip.decompress(compressed_content)
+            content = decompressed.decode("utf-8")
+    except Exception as e:  # noqa: BLE001
+        tqdm.write(f"{log_id}: failed to decompress: {e}")
+        return False
+
+    if not content:
+        return False
+
+    try:
+        parsed_rounds = split_log_to_game_rounds(content)
+    except Exception as e:  # noqa: BLE001
+        tqdm.write(f"{log_id}: failed to parse: {e}")
+        return False
+
+    return bool(parsed_rounds)
+
+
 def validate(db_path: Path) -> tuple[bool, int, int]:
     validate_db_path(db_path)
 
@@ -73,41 +120,26 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
 
         num_ids = db.count_all_ids(cursor)
         num_logs = db.count_all_log_contents(cursor)
-        logs_iter = db.iter_all_log_contents(cursor)
-
         were_errors = False
         num_valid_logs = 0
-        for log_id, compressed_content in tqdm(logs_iter, total=num_logs):
-            was_error = False
 
-            content = None
-            try:
-                content = gzip.decompress(compressed_content).decode("utf-8")
-            except Exception as e:  # noqa: BLE001
-                tqdm.write(f"{log_id}: failed to decompress: {e}")
-                was_error = True
+        with tqdm(total=num_logs) as progress:
+            for log_ids in iter_processed_log_id_batches(
+                cursor,
+                VALIDATE_BATCH_SIZE,
+            ):
+                for log_id in log_ids:
+                    compressed_content = db.get_log_content(cursor, log_id)
+                    if is_valid_log_content(log_id, compressed_content):
+                        num_valid_logs += 1
+                        progress.update(1)
+                        continue
 
-            if not content:
-                was_error = True
+                    were_errors = True
+                    msg = "Invalid log content detected. Reset to unprocessed."
+                    tqdm.write(msg)
+                    db.reset_log_content(cursor, log_id)
 
-            parsed_rounds = None
-            try:
-                if content:
-                    parsed_rounds = split_log_to_game_rounds(content)
-            except Exception as e:  # noqa: BLE001
-                tqdm.write(f"{log_id}: failed to parse: {e}")
-                was_error = True
-
-            if parsed_rounds:
-                num_valid_logs += 1
-            else:
-                was_error = True
-
-            if was_error:
-                were_errors = True
-                tqdm.write(
-                    "Invalid log content detected. Reset to unprocessed.",
-                )
-                db.reset_log_content(cursor, log_id)
+                    progress.update(1)
 
     return (were_errors, num_valid_logs, num_ids)
