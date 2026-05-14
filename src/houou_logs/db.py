@@ -31,6 +31,7 @@ def setup_table(conn: sqlite3.Connection) -> None:
         create_logs_table(conn)
         create_last_fetch_time_table(conn)
         create_file_index_table(conn)
+        create_logs_status_filter_index(conn)
 
 
 def create_logs_table(conn: sqlite3.Connection) -> None:
@@ -73,6 +74,15 @@ def create_file_index_table(conn: sqlite3.Connection) -> None:
             file TEXT PRIMARY KEY,
             size INTEGER NOT NULL CHECK(size > 0)
         ) WITHOUT ROWID;
+        """,
+    )
+
+
+def create_logs_status_filter_index(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_logs_status_filter
+        ON logs (is_processed, was_error, num_players, is_tonpu, id);
         """,
     )
 
