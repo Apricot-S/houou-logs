@@ -271,6 +271,54 @@ def test_insert_log_entries() -> None:
         conn.close()
 
 
+def test_insert_log_entries_keeps_existing_row_on_conflict() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        log_id = "2009010100gm-00a9-0000-00000000"
+        entry = db.LogEntry(
+            id=log_id,
+            date="2009-01-01",
+            num_players=4,
+            is_tonpu=False,
+            is_processed=True,
+            was_error=False,
+            log=b"downloaded log",
+        )
+        db.insert_log_entries(cursor, [entry])
+        conn.commit()
+
+        refreshed_entry = db.LogEntry(
+            id=log_id,
+            date="2009-01-02",
+            num_players=3,
+            is_tonpu=True,
+            is_processed=False,
+            was_error=True,
+            log=None,
+        )
+        db.insert_log_entries(cursor, [refreshed_entry])
+        conn.commit()
+
+        cursor.execute("SELECT * FROM logs WHERE id = ?;", (log_id,))
+        actual = cursor.fetchone()
+        expected = (
+            log_id,
+            "2009-01-01",
+            4,
+            0,
+            1,
+            0,
+            b"downloaded log",
+        )
+        assert actual == expected
+    finally:
+        conn.close()
+
+
 def test_list_undownloaded_log_ids_after() -> None:
     conn = db.open_db(":memory:")
 

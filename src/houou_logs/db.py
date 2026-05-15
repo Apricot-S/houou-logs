@@ -153,13 +153,7 @@ def insert_log_entries(
         """
         INSERT INTO logs (id, date, num_players, is_tonpu, is_processed, was_error, log)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            date=excluded.date,
-            num_players=excluded.num_players,
-            is_tonpu=excluded.is_tonpu,
-            is_processed=excluded.is_processed,
-            was_error=excluded.was_error,
-            log=excluded.log;
+        ON CONFLICT(id) DO NOTHING;
         """,  # noqa: E501
         values,
     )
