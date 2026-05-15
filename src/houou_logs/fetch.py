@@ -56,7 +56,7 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
     return {
         name: size
         for name, size in file_index.items()
-        if HOUOU_ARCHIVE_PREFIX in name
+        if Path(name).name.startswith(HOUOU_ARCHIVE_PREFIX)
     }
 
 

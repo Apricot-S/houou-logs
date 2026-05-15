@@ -137,6 +137,11 @@ def test_filter_houou_files_contains_old_houou_file() -> None:
     }
 
 
+def test_filter_houou_files_ignores_prefix_in_directory_name() -> None:
+    file_index = {"scc_archive/sca20250101.log.gz": 75399}
+    assert filter_houou_files(file_index) == {}
+
+
 def test_exclude_unchanged_files_excludes_unchanged_file() -> None:
     file_index = {"sca20250101.log.gz": 75399, "scc20250101.html.gz": 40759}
     db_records = {"sca20250101.log.gz": 75399, "scc20250101.html.gz": 40758}
