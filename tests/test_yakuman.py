@@ -87,6 +87,39 @@ sw();
         extract_ids(text)
 
 
+def test_extract_ids_raises_error_when_ykm_is_malformed() -> None:
+    text = """total=580570;
+updated="2025/02/01 00:12";
+ykm=[foo];
+sw();
+"""
+
+    with pytest.raises(RuntimeError, match="failed to parse ykm array"):
+        extract_ids(text)
+
+
+def test_extract_ids_new_format_rejects_invalid_length() -> None:
+    text = """total=580570;
+updated="2025/02/01 00:12";
+ykm=['01/31 23:57','etra'];
+sw();
+"""
+
+    with pytest.raises(RuntimeError, match="invalid new ykm array length"):
+        extract_ids(text)
+
+
+def test_extract_ids_new_format_rejects_invalid_entry() -> None:
+    text = """total=580570;
+updated="2025/02/01 00:12";
+ykm=['01/31 23:57','etra','[1]',[39],123];
+sw();
+"""
+
+    with pytest.raises(TypeError, match="invalid new ykm array entry"):
+        extract_ids(text)
+
+
 def test_extract_ids_old_format() -> None:
     text = """total=451693;
 
@@ -109,6 +142,19 @@ sw();
         ("01/31 23:52", "2008013123gm-0009-0000-5ab263c2"),
     ]
     assert extract_ids(text) == ids
+
+
+def test_extract_ids_old_format_rejects_invalid_entry() -> None:
+    text = """total=451693;
+updated="2008/02/01 01:17";
+ykm=[
+['01/31 23:58','りょぬの']
+];
+sw();
+"""
+
+    with pytest.raises(RuntimeError, match="invalid old ykm array entry"):
+        extract_ids(text)
 
 
 def test_parse_id_new_format() -> None:
