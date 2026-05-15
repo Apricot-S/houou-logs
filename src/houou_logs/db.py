@@ -123,11 +123,12 @@ def insert_log_entries(
     )
 
 
-def get_undownloaded_log_ids(
+def list_undownloaded_log_ids_after(
     cursor: sqlite3.Cursor,
     players: int | None,
     length: str | None,
-    limit: int | None,
+    after_id: str | None,
+    limit: int,
 ) -> list[str]:
     conditions = ["is_processed = 0", "was_error = 0"]
     params: list = []
@@ -146,21 +147,57 @@ def get_undownloaded_log_ids(
                 msg = f"unknown length: {length}"
                 raise ValueError(msg)
 
+    if after_id is not None:
+        conditions.append("id > ?")
+        params.append(after_id)
+
     sql = f"""
         SELECT id
         FROM logs
         WHERE {" AND ".join(conditions)}
         ORDER BY id ASC
+        LIMIT ?
         """  # noqa: S608
-
-    if limit is not None:
-        sql += " LIMIT ?"
-        params.append(limit)
+    params.append(limit)
 
     cursor.execute(sql, params)
-    rows = cursor.fetchall()
+    return [row[0] for row in cursor.fetchall()]
 
-    return [row[0] for row in rows]
+
+def count_undownloaded_log_ids(
+    cursor: sqlite3.Cursor,
+    players: int | None,
+    length: str | None,
+    limit: int | None,
+) -> int:
+    conditions = ["is_processed = 0", "was_error = 0"]
+    params: list = []
+
+    if players is not None:
+        conditions.append("num_players = ?")
+        params.append(players)
+
+    if length is not None:
+        match length:
+            case "t":
+                conditions.append("is_tonpu = 1")
+            case "h":
+                conditions.append("is_tonpu = 0")
+            case _:
+                msg = f"unknown length: {length}"
+                raise ValueError(msg)
+
+    sql = f"""
+        SELECT COUNT(*)
+        FROM logs
+        WHERE {" AND ".join(conditions)}
+        """  # noqa: S608
+
+    cursor.execute(sql, params)
+    count = cursor.fetchone()[0]
+    if limit is not None:
+        return min(count, limit)
+    return count
 
 
 def update_log_entries(

@@ -3,11 +3,13 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
 from houou_logs.download import (
     build_url,
+    iter_undownloaded_log_id_batches,
     validate_db_path,
     validate_length,
     validate_limit,
@@ -66,3 +68,28 @@ def test_build_url() -> None:
         build_url("2024060600gm-00b9-0000-88e70833")
         == "https://tenhou.net/0/log/?2024060600gm-00b9-0000-88e70833"
     )
+
+
+def test_iter_undownloaded_log_id_batches_respects_limit() -> None:
+    mock_cursor = Mock()
+    mock_cursor.fetchall.side_effect = [
+        [("2009010100gm-00a9-0000-00000000",)],
+        [("2009010101gm-00a9-0000-00000000",)],
+    ]
+
+    actual = list(
+        iter_undownloaded_log_id_batches(
+            mock_cursor,
+            None,
+            None,
+            2,
+            1,
+        ),
+    )
+
+    expected = [
+        ["2009010100gm-00a9-0000-00000000"],
+        ["2009010101gm-00a9-0000-00000000"],
+    ]
+    assert actual == expected
+    assert mock_cursor.execute.call_count == 2

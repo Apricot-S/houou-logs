@@ -3,6 +3,8 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
+import sqlite3
+from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
@@ -13,6 +15,8 @@ from tqdm import tqdm
 from houou_logs import db
 from houou_logs.exceptions import UserInputError
 from houou_logs.session import TIMEOUT, create_session
+
+DOWNLOAD_BATCH_SIZE = 1000
 
 
 def validate_db_path(db_path: Path) -> None:
@@ -66,6 +70,35 @@ def fetch_log_content(session: Session, url: str) -> bytes:
     return content
 
 
+def iter_undownloaded_log_id_batches(
+    cursor: sqlite3.Cursor,
+    players: int | None,
+    length: str | None,
+    limit: int | None,
+    batch_size: int,
+) -> Iterator[list[str]]:
+    last_id = None
+    num_logs = 0
+    while limit is None or num_logs < limit:
+        current_batch_size = batch_size
+        if limit is not None:
+            current_batch_size = min(current_batch_size, limit - num_logs)
+
+        log_ids = db.list_undownloaded_log_ids_after(
+            cursor,
+            players,
+            length,
+            last_id,
+            current_batch_size,
+        )
+        if not log_ids:
+            break
+
+        last_id = log_ids[-1]
+        num_logs += len(log_ids)
+        yield log_ids
+
+
 def download(
     db_path: Path,
     players: int | None,
@@ -85,36 +118,51 @@ def download(
         cursor = conn.cursor()
 
         with create_session() as session:
-            ids = db.get_undownloaded_log_ids(cursor, players, length, limit)
+            total = db.count_undownloaded_log_ids(
+                cursor,
+                players,
+                length,
+                limit,
+            )
 
-            for log_id in tqdm(ids):
-                content = b""
-                was_error = False
-
-                url = build_url(log_id)
-
-                try:
-                    content = fetch_log_content(session, url)
-                except Exception as e:  # noqa: BLE001
-                    tqdm.write(f"{log_id}: {e}")
-                    was_error = True
-
-                compressed_content = None
-                if not was_error:
-                    try:
-                        compressed_content = gzip.compress(content)
-                    except Exception as e:  # noqa: BLE001
-                        tqdm.write(f"{log_id}: failed to compress: {e}")
-                        was_error = True
-
-                db.update_log_entries(
+            with tqdm(total=total) as progress:
+                for ids in iter_undownloaded_log_id_batches(
                     cursor,
-                    log_id,
-                    was_error,
-                    compressed_content,
-                )
-                num_logs += 1
+                    players,
+                    length,
+                    limit,
+                    DOWNLOAD_BATCH_SIZE,
+                ):
+                    for log_id in ids:
+                        content = b""
+                        was_error = False
 
-                conn.commit()
+                        url = build_url(log_id)
+
+                        try:
+                            content = fetch_log_content(session, url)
+                        except Exception as e:  # noqa: BLE001
+                            tqdm.write(f"{log_id}: {e}")
+                            was_error = True
+
+                        compressed_content = None
+                        if not was_error:
+                            try:
+                                compressed_content = gzip.compress(content)
+                            except Exception as e:  # noqa: BLE001
+                                msg = f"{log_id}: failed to compress: {e}"
+                                tqdm.write(msg)
+                                was_error = True
+
+                        db.update_log_entries(
+                            cursor,
+                            log_id,
+                            was_error,
+                            compressed_content,
+                        )
+                        num_logs += 1
+                        progress.update(1)
+
+                        conn.commit()
 
     return num_logs

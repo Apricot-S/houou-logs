@@ -241,11 +241,66 @@ def test_insert_log_entries() -> None:
         conn.close()
 
 
-def test_get_undownloaded_log_ids(conn_test_db: sqlite3.Connection) -> None:
+def test_list_undownloaded_log_ids_after() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+        entries = [
+            db.LogEntry(
+                id="2009010100gm-00a9-0000-00000000",
+                date="2009-01-01",
+                num_players=4,
+                is_tonpu=False,
+                is_processed=False,
+                was_error=False,
+                log=None,
+            ),
+            db.LogEntry(
+                id="2009010101gm-00a9-0000-00000000",
+                date="2009-01-01",
+                num_players=4,
+                is_tonpu=False,
+                is_processed=False,
+                was_error=False,
+                log=None,
+            ),
+            db.LogEntry(
+                id="2009010102gm-00a9-0000-00000000",
+                date="2009-01-01",
+                num_players=4,
+                is_tonpu=False,
+                is_processed=False,
+                was_error=False,
+                log=None,
+            ),
+        ]
+        db.insert_log_entries(cursor, entries)
+        conn.commit()
+
+        actual = db.list_undownloaded_log_ids_after(
+            cursor,
+            None,
+            None,
+            "2009010100gm-00a9-0000-00000000",
+            2,
+        )
+        expected = [
+            "2009010101gm-00a9-0000-00000000",
+            "2009010102gm-00a9-0000-00000000",
+        ]
+        assert actual == expected
+    finally:
+        conn.close()
+
+
+def test_count_undownloaded_log_ids_with_limit(
+    conn_test_db: sqlite3.Connection,
+) -> None:
     cursor = conn_test_db.cursor()
-    actual = db.get_undownloaded_log_ids(cursor, None, None, None)
-    expected = ["2009010100gm-00a9-0000-00000000"]
-    assert actual == expected
+    actual = db.count_undownloaded_log_ids(cursor, None, None, 1)
+    assert actual == 1
 
 
 def test_update_log_entries() -> None:
