@@ -4,11 +4,14 @@
 
 from pathlib import Path
 
+import pytest
+
 from houou_logs.db import LogEntry
 from houou_logs.log_id import (
     extract_ids,
     extract_log_entries,
     parse_date,
+    parse_id,
     parse_type,
 )
 
@@ -57,6 +60,13 @@ def test_parse_type_3_hanchan() -> None:
     num_players, is_tonpu = parse_type("00b9")
     assert num_players == 3
     assert not is_tonpu
+
+
+def test_parse_id_rejects_invalid_log_id() -> None:
+    invalid_log_id = "invalid"
+
+    with pytest.raises(ValueError, match=f"invalid log ID: {invalid_log_id}"):
+        parse_id("00:00", invalid_log_id)
 
 
 def test_extract_log_entries_skips_extension_log(tmp_path: Path) -> None:
@@ -110,3 +120,33 @@ def test_extract_log_entries_parse_extension_html(tmp_path: Path) -> None:
         ),
     ]
     assert entries == expected
+
+
+def test_extract_log_entries_skips_invalid_log_id(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    filename = "valid_log.html"
+    fake_file = tmp_path / filename
+    log = """
+00:00 | <a href="http://tenhou.net/0/?log=invalid">牌譜</a><br>
+23:02 | <a href="http://tenhou.net/0/?log=2009020123gm-00a9-0000-00000001">牌譜</a><br>
+"""
+    fake_file.write_text(log, encoding="utf-8")
+
+    with fake_file.open(mode="br") as f:
+        entries = extract_log_entries(filename, f)
+
+    assert entries == [
+        LogEntry(
+            id="2009020123gm-00a9-0000-00000001",
+            date="2009-02-01T23:02",
+            num_players=4,
+            is_tonpu=False,
+            is_processed=False,
+            was_error=False,
+            log=None,
+        ),
+    ]
+    captured = capsys.readouterr()
+    assert captured.err == ""
