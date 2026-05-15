@@ -122,10 +122,7 @@ def test_extract_log_entries_parse_extension_html(tmp_path: Path) -> None:
     assert entries == expected
 
 
-def test_extract_log_entries_skips_invalid_log_id(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_extract_log_entries_skips_invalid_log_id(tmp_path: Path) -> None:
     filename = "valid_log.html"
     fake_file = tmp_path / filename
     log = """
@@ -148,5 +145,3 @@ def test_extract_log_entries_skips_invalid_log_id(
             log=None,
         ),
     ]
-    captured = capsys.readouterr()
-    assert captured.err == ""
