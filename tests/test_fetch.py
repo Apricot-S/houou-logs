@@ -12,6 +12,7 @@ from niquests.exceptions import HTTPError
 from houou_logs.fetch import (
     exclude_unchanged_files,
     fetch_file_index_text,
+    fetch_log_file_content,
     filter_houou_files,
     parse_file_index,
     should_fetch,
@@ -58,6 +59,48 @@ def test_fetch_file_index_text_error() -> None:
 
     with pytest.raises(HTTPError):
         fetch_file_index_text(mock_session, fake_url)
+
+
+def test_fetch_log_file_content_success() -> None:
+    fake_url = "https://example.com/scc20250101.html.gz"
+    fake_content = b"content"
+
+    mock_session = Mock(spec_set=Session)
+    mock_resp = Mock(spec_set=Response)
+    mock_resp.content = fake_content
+    mock_resp.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_resp
+
+    result = fetch_log_file_content(mock_session, fake_url)
+
+    mock_session.get.assert_called_once_with(fake_url, timeout=(5.0, 5.0))
+    mock_resp.raise_for_status.assert_called_once()
+    assert result == fake_content
+
+
+def test_fetch_log_file_content_http_error() -> None:
+    fake_url = "https://example.com/scc20250101.html.gz"
+
+    mock_session = Mock(spec_set=Session)
+    mock_resp = Mock(spec_set=Response)
+    mock_resp.raise_for_status.side_effect = HTTPError("404 Not Found")
+    mock_session.get.return_value = mock_resp
+
+    with pytest.raises(HTTPError):
+        fetch_log_file_content(mock_session, fake_url)
+
+
+def test_fetch_log_file_content_none() -> None:
+    fake_url = "https://example.com/scc20250101.html.gz"
+
+    mock_session = Mock(spec_set=Session)
+    mock_resp = Mock(spec_set=Response)
+    mock_resp.content = None
+    mock_resp.raise_for_status.return_value = None
+    mock_session.get.return_value = mock_resp
+
+    with pytest.raises(RuntimeError, match="response content is None"):
+        fetch_log_file_content(mock_session, fake_url)
 
 
 def test_parse_file_index_empty() -> None:
