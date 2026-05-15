@@ -21,7 +21,12 @@ INDEX_URL_LATEST = "https://tenhou.net/sc/raw/list.cgi"
 INDEX_URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
 LOG_DOWNLOAD_URL = "https://tenhou.net/sc/raw/dat/"
 
-FILE_INDEX_ENTRY_PATTERN = re.compile(r"file:'([^']+)',size:(\d+)")
+FILE_INDEX_ENTRY_PATTERN = re.compile(
+    r"file\s*:\s*'([^']+)'\s*,\s*size\s*:\s*(\d+)",
+)
+EMPTY_FILE_INDEX_PATTERN = re.compile(
+    r"^\s*list\s*\(\s*(?:\[\s*\])?\s*\)\s*;\s*$",
+)
 
 
 def should_fetch(
@@ -61,7 +66,14 @@ def fetch_log_file_content(session: niquests.Session, url: str) -> bytes:
 
 def parse_file_index(response: str) -> dict[str, int]:
     matches = FILE_INDEX_ENTRY_PATTERN.findall(response)
-    return {path: int(size) for path, size in matches}
+    if matches:
+        return {path: int(size) for path, size in matches}
+
+    if EMPTY_FILE_INDEX_PATTERN.fullmatch(response):
+        return {}
+
+    msg = "failed to parse file index"
+    raise RuntimeError(msg)
 
 
 def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
