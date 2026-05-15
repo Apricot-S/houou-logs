@@ -47,6 +47,18 @@ def fetch_file_index_text(session: niquests.Session, url: str) -> str:
     return text
 
 
+def fetch_log_file_content(session: niquests.Session, url: str) -> bytes:
+    res = session.get(url, timeout=TIMEOUT)
+    res.raise_for_status()
+
+    content = res.content
+    if content is None:
+        msg = "response content is None"
+        raise RuntimeError(msg)
+
+    return content
+
+
 def parse_file_index(response: str) -> dict[str, int]:
     matches = FILE_INDEX_ENTRY_PATTERN.findall(response)
     return {path: int(size) for path, size in matches}
@@ -94,12 +106,7 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
 
             for filename, size in tqdm(changed_files.items()):
                 url = f"{LOG_DOWNLOAD_URL}{filename}"
-                page = session.get(url, timeout=TIMEOUT)
-
-                content = page.content
-                if content is None:
-                    msg = "response content is None"
-                    raise RuntimeError(msg)
+                content = fetch_log_file_content(session, url)
 
                 with io.BytesIO(content) as f:
                     entries = extract_log_entries(filename, f)
