@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import sqlite3
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -30,6 +31,7 @@ def setup_table(conn: sqlite3.Connection) -> None:
     with conn:
         create_logs_table(conn)
         create_last_fetch_time_table(conn)
+        migrate_last_fetch_time_table(conn)
         create_file_index_table(conn)
         create_logs_status_filter_index(conn)
 
@@ -63,8 +65,48 @@ def create_last_fetch_time_table(conn: sqlite3.Connection) -> None:
     if exists:
         return
 
-    conn.execute("CREATE TABLE last_fetch_time (time REAL);")
-    conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (0.0,))
+    conn.execute(
+        """
+        CREATE TABLE last_fetch_time (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            time REAL NOT NULL
+        );
+        """,
+    )
+    conn.execute(
+        "INSERT INTO last_fetch_time (id, time) VALUES (?, ?);",
+        (1, 0.0),
+    )
+
+
+def migrate_last_fetch_time_table(conn: sqlite3.Connection) -> None:
+    cursor = conn.execute("PRAGMA table_info(last_fetch_time);")
+    columns = [row[1] for row in cursor.fetchall()]
+    if columns != ["time"]:
+        return
+
+    # v1.0.8 and earlier used a single-column table without a constraint
+    # enforcing that only one row can exist.
+    cursor = conn.execute("SELECT MAX(time) FROM last_fetch_time;")
+    time = cursor.fetchone()[0]
+    if time is None:
+        time = 0.0
+
+    conn.execute("ALTER TABLE last_fetch_time RENAME TO last_fetch_time_old;")
+    conn.execute(
+        """
+        CREATE TABLE last_fetch_time (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            time REAL NOT NULL
+        );
+        """,
+    )
+    conn.execute(
+        "INSERT INTO last_fetch_time (id, time) VALUES (?, ?);",
+        (1, time),
+    )
+    conn.execute("DROP TABLE last_fetch_time_old;")
+    print("Migrated last_fetch_time table schema.", file=sys.stderr)
 
 
 def create_file_index_table(conn: sqlite3.Connection) -> None:
@@ -389,7 +431,8 @@ def reset_log_content(cursor: sqlite3.Cursor, log_id: str) -> None:
 def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
     cursor.execute(
         """
-        UPDATE last_fetch_time SET time = ?;
+        UPDATE last_fetch_time SET time = ?
+        WHERE id = 1;
         """,
         (time.astimezone(UTC).timestamp(),),
     )
@@ -398,7 +441,8 @@ def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
 def get_last_fetch_time(cursor: sqlite3.Cursor) -> datetime:
     cursor.execute(
         """
-        SELECT time FROM last_fetch_time;
+        SELECT time FROM last_fetch_time
+        WHERE id = 1;
         """,
     )
     timestamp = cursor.fetchone()[0]

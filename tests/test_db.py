@@ -157,6 +157,36 @@ def test_setup_table_creates_last_fetch_time_table() -> None:
         table = cursor.fetchone()
         assert table is not None
         assert table[0] == "last_fetch_time"
+
+        cursor = conn.execute("PRAGMA table_info(last_fetch_time);")
+        columns = [row[1] for row in cursor.fetchall()]
+        assert columns == ["id", "time"]
+    finally:
+        conn.close()
+
+
+def test_setup_table_migrates_legacy_last_fetch_time_table(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        conn.execute("CREATE TABLE last_fetch_time (time REAL);")
+        conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (1.0,))
+        conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (2.0,))
+        conn.commit()
+
+        db.setup_table(conn)
+
+        cursor = conn.execute("PRAGMA table_info(last_fetch_time);")
+        columns = [row[1] for row in cursor.fetchall()]
+        assert columns == ["id", "time"]
+
+        cursor = conn.execute("SELECT id, time FROM last_fetch_time;")
+        assert cursor.fetchall() == [(1, 2.0)]
+
+        captured = capsys.readouterr()
+        assert captured.err == "Migrated last_fetch_time table schema.\n"
     finally:
         conn.close()
 
@@ -458,7 +488,7 @@ def test_update_last_fetch_time() -> None:
         db.update_last_fetch_time(cursor, time)
         conn.commit()
 
-        cursor.execute("SELECT * FROM last_fetch_time;")
+        cursor.execute("SELECT time FROM last_fetch_time;")
         rows = cursor.fetchall()
         assert rows[0][0] == timestamp
     finally:
@@ -480,9 +510,24 @@ def test_update_last_fetch_time_has_only_one_row() -> None:
         db.update_last_fetch_time(cursor, time2)
         conn.commit()
 
-        cursor.execute("SELECT * FROM last_fetch_time;")
+        cursor.execute("SELECT time FROM last_fetch_time;")
         rows = cursor.fetchall()
         assert len(rows) == 1
+    finally:
+        conn.close()
+
+
+def test_last_fetch_time_rejects_second_row() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO last_fetch_time (id, time) VALUES (?, ?);",
+                (2, 0.0),
+            )
     finally:
         conn.close()
 
@@ -503,7 +548,7 @@ def test_update_last_fetch_time_has_only_last_time() -> None:
         db.update_last_fetch_time(cursor, time2)
         conn.commit()
 
-        cursor.execute("SELECT * FROM last_fetch_time;")
+        cursor.execute("SELECT time FROM last_fetch_time;")
         rows = cursor.fetchall()
         assert rows[0][0] == timestamp
     finally:
