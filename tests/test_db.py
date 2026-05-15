@@ -392,6 +392,14 @@ def test_count_log_contents(conn_test_db: sqlite3.Connection) -> None:
     assert actual == 1
 
 
+def test_count_log_contents_applies_limit_and_offset(
+    conn_test_db: sqlite3.Connection,
+) -> None:
+    cursor = conn_test_db.cursor()
+    actual = db.count_log_contents(cursor, None, None, 1, 1)
+    assert actual == 0
+
+
 def test_count_all_ids(conn_test_db: sqlite3.Connection) -> None:
     cursor = conn_test_db.cursor()
     actual = db.count_all_ids(cursor)
