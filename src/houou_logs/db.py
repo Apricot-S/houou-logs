@@ -353,20 +353,22 @@ def count_log_contents(
                 msg = f"unknown length: {length}"
                 raise ValueError(msg)
 
-    inner_sql = f"""
-        SELECT id
+    sql = f"""
+        SELECT COUNT(*)
         FROM logs
         WHERE {" AND ".join(conditions)}
-        ORDER BY id ASC
         """  # noqa: S608
 
-    if limit is not None:
-        inner_sql += " LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-
-    sql = f"SELECT COUNT(*) FROM ({inner_sql})"  # noqa: S608
     cursor.execute(sql, params)
-    return cursor.fetchone()[0]
+    count = cursor.fetchone()[0]
+
+    if offset > 0:
+        count = max(count - offset, 0)
+
+    if limit is not None:
+        return min(count, limit)
+
+    return count
 
 
 def count_all_ids(cursor: sqlite3.Cursor) -> int:
