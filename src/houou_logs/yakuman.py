@@ -52,6 +52,39 @@ def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
     return content.decode("utf-8")
 
 
+def extract_ids_from_new_format(ykm_array: list) -> list[tuple[str, str]]:
+    # New format: format from February 2008
+    if len(ykm_array) % 5 != 0:
+        msg = "invalid new ykm array length"
+        raise RuntimeError(msg)
+
+    ids = []
+    for i in range(0, len(ykm_array), 5):
+        date = ykm_array[i]
+        log_id = ykm_array[i + 4]
+        if not isinstance(date, str) or not isinstance(log_id, str):
+            msg = "invalid new ykm array entry"
+            raise TypeError(msg)
+        ids.append((date, log_id.split("&", 1)[0]))
+    return ids
+
+
+def extract_ids_from_old_format(ykm_array: list) -> list[tuple[str, str]]:
+    # Old format: format until January 2008
+    ids = []
+    for entry in ykm_array:
+        if (
+            not isinstance(entry, list)
+            or len(entry) < 5  # noqa: PLR2004
+            or not isinstance(entry[0], str)
+            or not isinstance(entry[4], str)
+        ):
+            msg = "invalid old ykm array entry"
+            raise RuntimeError(msg)
+        ids.append((entry[0], entry[4]))
+    return ids
+
+
 def extract_ids(text: str) -> list[tuple[str, str]]:
     match = YKM_ARRAY_PATTERN.search(text)
     if not match:
@@ -59,21 +92,24 @@ def extract_ids(text: str) -> list[tuple[str, str]]:
         raise RuntimeError(msg)
 
     ykm_text = match.group(1)
-    ykm_array = ast.literal_eval(ykm_text)
+    try:
+        ykm_array = ast.literal_eval(ykm_text)
+    except (SyntaxError, ValueError) as e:
+        msg = "failed to parse ykm array"
+        raise RuntimeError(msg) from e
+
+    if not isinstance(ykm_array, list):
+        msg = "ykm array must be a list"
+        raise TypeError(msg)
 
     if len(ykm_array) == 0:
         return []
 
     match ykm_array[0]:
         case str():
-            # New format: format from February 2008
-            return [
-                (ykm_array[i], ykm_array[i + 4].split("&", 1)[0])
-                for i in range(0, len(ykm_array) - 4, 5)
-            ]
+            return extract_ids_from_new_format(ykm_array)
         case list():
-            # Old format: format until January 2008
-            return [(entry[0], entry[4]) for entry in ykm_array]
+            return extract_ids_from_old_format(ykm_array)
         case _:
             msg = "unsupported ykm array format"
             raise RuntimeError(msg)
