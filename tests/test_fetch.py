@@ -103,8 +103,22 @@ def test_fetch_log_file_content_none() -> None:
         fetch_log_file_content(mock_session, fake_url)
 
 
-def test_parse_file_index_empty() -> None:
-    resp = """list();"""
+@pytest.mark.parametrize(
+    "resp",
+    [
+        "list();",
+        "list([]);",
+        """
+list(
+);
+""",
+        """
+list([
+]);
+""",
+    ],
+)
+def test_parse_file_index_empty(resp: str) -> None:
     file_index = parse_file_index(resp)
     assert file_index == {}
 
@@ -121,6 +135,33 @@ def test_parse_file_index_latest_1_entry() -> None:
     file_index = parse_file_index(resp)
     expected = {"sca20250101.log.gz": 75399}
     assert file_index == expected
+
+
+def test_parse_file_index_allows_whitespace_around_entry_fields() -> None:
+    resp = """list([
+
+{ file : 'scc20250101.html.gz' , size : 40758 }
+
+]);
+
+
+"""
+    file_index = parse_file_index(resp)
+    expected = {"scc20250101.html.gz": 40758}
+    assert file_index == expected
+
+
+def test_parse_file_index_rejects_malformed_input() -> None:
+    resp = """list([
+
+{file:'scc20250101.html.gz',bytes:40758}
+
+]);
+
+
+"""
+    with pytest.raises(RuntimeError, match="failed to parse file index"):
+        parse_file_index(resp)
 
 
 def test_parse_file_index_old_1_entry() -> None:
