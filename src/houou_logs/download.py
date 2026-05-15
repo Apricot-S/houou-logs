@@ -70,6 +70,32 @@ def fetch_log_content(session: Session, url: str) -> bytes:
     return content
 
 
+def fetch_log_content_for_download(
+    session: Session,
+    log_id: str,
+) -> tuple[bool, bytes]:
+    url = build_url(log_id)
+
+    try:
+        content = fetch_log_content(session, url)
+    except Exception as e:  # noqa: BLE001
+        tqdm.write(f"{log_id}: {e}")
+        return (True, b"")
+
+    return (False, content)
+
+
+def compress_log_content(
+    log_id: str,
+    content: bytes,
+) -> tuple[bool, bytes | None]:
+    try:
+        return (False, gzip.compress(content))
+    except Exception as e:  # noqa: BLE001
+        tqdm.write(f"{log_id}: failed to compress: {e}")
+        return (True, None)
+
+
 def iter_undownloaded_log_id_batches(
     cursor: sqlite3.Cursor,
     players: int | None,
@@ -134,25 +160,16 @@ def download(
                     DOWNLOAD_BATCH_SIZE,
                 ):
                     for log_id in ids:
-                        content = b""
-                        was_error = False
-
-                        url = build_url(log_id)
-
-                        try:
-                            content = fetch_log_content(session, url)
-                        except Exception as e:  # noqa: BLE001
-                            tqdm.write(f"{log_id}: {e}")
-                            was_error = True
+                        was_error, content = fetch_log_content_for_download(
+                            session,
+                            log_id,
+                        )
 
                         compressed_content = None
                         if not was_error:
-                            try:
-                                compressed_content = gzip.compress(content)
-                            except Exception as e:  # noqa: BLE001
-                                msg = f"{log_id}: failed to compress: {e}"
-                                tqdm.write(msg)
-                                was_error = True
+                            was_error, compressed_content = (
+                                compress_log_content(log_id, content)
+                            )
 
                         db.update_log_entries(
                             cursor,
