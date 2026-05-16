@@ -239,20 +239,6 @@ def update_log_entries(
         raise RuntimeError(msg)
 
 
-def iter_all_log_contents(
-    cursor: sqlite3.Cursor,
-) -> Iterator[tuple[str, bytes]]:
-    cursor.execute(
-        """
-        SELECT id, log
-        FROM logs
-        WHERE is_processed = 1
-        ORDER BY id ASC
-        """,
-    )
-    yield from cursor
-
-
 def count_all_log_contents(cursor: sqlite3.Cursor) -> int:
     cursor.execute(
         """
