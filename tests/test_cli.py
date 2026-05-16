@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from houou_logs.cli import (
+    INTERRUPTED_EXIT_CODE,
     IO_ERROR_EXIT_CODE,
     USER_INPUT_ERROR_EXIT_CODE,
     download_cli,
@@ -253,4 +254,22 @@ def test_main_exits_with_io_error_code_without_traceback(
     assert e.value.code == IO_ERROR_EXIT_CODE
     captured = capsys.readouterr()
     assert captured.err == "I/O error: network is unreachable\n"
+    assert "Traceback" not in captured.err
+
+
+@patch("houou_logs.fetch.fetch")
+def test_main_exits_with_interrupted_code_without_traceback(
+    mock_fetch: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    mock_fetch.side_effect = KeyboardInterrupt
+    monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
+
+    with pytest.raises(SystemExit) as e:
+        main()
+
+    assert e.value.code == INTERRUPTED_EXIT_CODE
+    captured = capsys.readouterr()
+    assert captured.err == "Interrupted by user.\n"
     assert "Traceback" not in captured.err
