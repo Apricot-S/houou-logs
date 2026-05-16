@@ -2,6 +2,13 @@
 
 Tools to download Houou (Phoenix) logs from tenhou.net
 
+> [!CAUTION]
+> Tenhou prohibits redistribution of game logs. Do not publish, share, mirror, or redistribute downloaded log data.
+>
+> Source:
+>
+> - <https://x.com/i/status/2052271028982931548>
+
 > [!WARNING]
 > Tenhou allows only **one session** to download logs at a time.  
 > Running multiple instances (e.g., via multiple terminals or background processes) **violates Tenhou's terms of use** and may result in access restrictions or bans.
