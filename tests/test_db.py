@@ -140,7 +140,7 @@ def test_setup_table_creates_logs_table() -> None:
         conn.close()
 
 
-def test_setup_table_creates_last_fetch_time_table() -> None:
+def test_setup_table_creates_fetch_state_table() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -148,24 +148,24 @@ def test_setup_table_creates_last_fetch_time_table() -> None:
 
         cursor = conn.execute(
             """
-            SELECT name
-            FROM sqlite_master
-            WHERE type='table'
-                AND name='last_fetch_time';
+                SELECT name
+                FROM sqlite_master
+                WHERE type='table'
+                AND name='fetch_state';
             """,
         )
         table = cursor.fetchone()
         assert table is not None
-        assert table[0] == "last_fetch_time"
+        assert table[0] == "fetch_state"
 
-        cursor = conn.execute("PRAGMA table_info(last_fetch_time);")
+        cursor = conn.execute("PRAGMA table_info(fetch_state);")
         columns = [row[1] for row in cursor.fetchall()]
-        assert columns == ["id", "time"]
+        assert columns == ["kind", "last_attempt_time"]
     finally:
         conn.close()
 
 
-def test_setup_table_migrates_legacy_last_fetch_time_table(
+def test_setup_table_migrates_legacy_last_fetch_time_to_fetch_state(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     conn = db.open_db(":memory:")
@@ -178,15 +178,27 @@ def test_setup_table_migrates_legacy_last_fetch_time_table(
 
         db.setup_table(conn)
 
-        cursor = conn.execute("PRAGMA table_info(last_fetch_time);")
+        cursor = conn.execute("PRAGMA table_info(fetch_state);")
         columns = [row[1] for row in cursor.fetchall()]
-        assert columns == ["id", "time"]
+        assert columns == ["kind", "last_attempt_time"]
 
-        cursor = conn.execute("SELECT id, time FROM last_fetch_time;")
-        assert cursor.fetchall() == [(1, 2.0)]
+        cursor = conn.execute(
+            "SELECT kind, last_attempt_time FROM fetch_state;",
+        )
+        assert cursor.fetchall() == [("latest", 2.0)]
+
+        cursor = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
+                AND name='last_fetch_time';
+            """,
+        )
+        assert cursor.fetchone() is None
 
         captured = capsys.readouterr()
-        assert captured.err == "Migrated last_fetch_time table schema.\n"
+        assert captured.err == "Migrated last_fetch_time to fetch_state.\n"
     finally:
         conn.close()
 
@@ -522,7 +534,7 @@ def test_reset_log_content() -> None:
         conn.close()
 
 
-def test_update_last_fetch_time() -> None:
+def test_update_fetch_attempt_time() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -533,17 +545,17 @@ def test_update_last_fetch_time() -> None:
         time = datetime(2025, 9, 20, 10, 30, 40, 500, tzinfo=zone_info)
         timestamp = time.astimezone(UTC).timestamp()
 
-        db.update_last_fetch_time(cursor, time)
+        db.update_fetch_attempt_time(cursor, "latest", time)
         conn.commit()
 
-        cursor.execute("SELECT time FROM last_fetch_time;")
+        cursor.execute("SELECT kind, last_attempt_time FROM fetch_state;")
         rows = cursor.fetchall()
-        assert rows[0][0] == timestamp
+        assert rows == [("latest", timestamp)]
     finally:
         conn.close()
 
 
-def test_update_last_fetch_time_has_only_one_row() -> None:
+def test_update_fetch_attempt_time_has_only_one_row_per_kind() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -554,33 +566,43 @@ def test_update_last_fetch_time_has_only_one_row() -> None:
         time1 = datetime(2025, 9, 20, 10, 30, 40, 500, tzinfo=zone_info)
         time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
 
-        db.update_last_fetch_time(cursor, time1)
-        db.update_last_fetch_time(cursor, time2)
+        db.update_fetch_attempt_time(cursor, "latest", time1)
+        db.update_fetch_attempt_time(cursor, "latest", time2)
         conn.commit()
 
-        cursor.execute("SELECT time FROM last_fetch_time;")
+        cursor.execute("SELECT last_attempt_time FROM fetch_state;")
         rows = cursor.fetchall()
         assert len(rows) == 1
     finally:
         conn.close()
 
 
-def test_last_fetch_time_rejects_second_row() -> None:
+def test_fetch_state_allows_latest_and_archive_rows() -> None:
     conn = db.open_db(":memory:")
 
     try:
         db.setup_table(conn)
+        cursor = conn.cursor()
 
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute(
-                "INSERT INTO last_fetch_time (id, time) VALUES (?, ?);",
-                (2, 0.0),
-            )
+        db.update_fetch_attempt_time(
+            cursor,
+            "latest",
+            datetime(2025, 9, 20, tzinfo=UTC),
+        )
+        db.update_fetch_attempt_time(
+            cursor,
+            "archive",
+            datetime(2025, 9, 21, tzinfo=UTC),
+        )
+        conn.commit()
+
+        cursor.execute("SELECT kind FROM fetch_state ORDER BY kind;")
+        assert cursor.fetchall() == [("archive",), ("latest",)]
     finally:
         conn.close()
 
 
-def test_update_last_fetch_time_has_only_last_time() -> None:
+def test_update_fetch_attempt_time_has_only_last_time() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -592,30 +614,30 @@ def test_update_last_fetch_time_has_only_last_time() -> None:
         time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
         timestamp = time2.astimezone(UTC).timestamp()
 
-        db.update_last_fetch_time(cursor, time1)
-        db.update_last_fetch_time(cursor, time2)
+        db.update_fetch_attempt_time(cursor, "latest", time1)
+        db.update_fetch_attempt_time(cursor, "latest", time2)
         conn.commit()
 
-        cursor.execute("SELECT time FROM last_fetch_time;")
+        cursor.execute("SELECT last_attempt_time FROM fetch_state;")
         rows = cursor.fetchall()
         assert rows[0][0] == timestamp
     finally:
         conn.close()
 
 
-def test_get_last_fetch_time_never_fetched() -> None:
+def test_get_fetch_attempt_time_never_fetched() -> None:
     conn = db.open_db(":memory:")
 
     try:
         db.setup_table(conn)
         cursor = conn.cursor()
-        last_fetch_time = db.get_last_fetch_time(cursor)
-        assert last_fetch_time.astimezone(UTC).timestamp() == 0.0
+        last_attempt_time = db.get_fetch_attempt_time(cursor, "archive")
+        assert last_attempt_time.astimezone(UTC).timestamp() == 0.0
     finally:
         conn.close()
 
 
-def test_get_last_fetch_time_2_times_updated() -> None:
+def test_get_fetch_attempt_time_2_times_updated() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -626,12 +648,12 @@ def test_get_last_fetch_time_2_times_updated() -> None:
         time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
         timestamp = time2.astimezone(UTC).timestamp()
 
-        db.update_last_fetch_time(cursor, time1)
-        db.update_last_fetch_time(cursor, time2)
+        db.update_fetch_attempt_time(cursor, "latest", time1)
+        db.update_fetch_attempt_time(cursor, "latest", time2)
         conn.commit()
 
-        last_fetch_time = db.get_last_fetch_time(cursor)
-        assert last_fetch_time.astimezone(UTC).timestamp() == timestamp
+        last_attempt_time = db.get_fetch_attempt_time(cursor, "latest")
+        assert last_attempt_time.astimezone(UTC).timestamp() == timestamp
     finally:
         conn.close()
 

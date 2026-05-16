@@ -3,12 +3,15 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 from niquests import Response, Session
 from niquests.exceptions import HTTPError
 
+from houou_logs import db
+from houou_logs import fetch as fetch_module
 from houou_logs.fetch import (
     exclude_unchanged_files,
     fetch_file_index_text,
@@ -20,16 +23,16 @@ from houou_logs.fetch import (
 
 
 @pytest.mark.parametrize(
-    ("last_fetch_time", "expected"),
+    ("last_attempt_time", "expected"),
     [
         (datetime(2025, 9, 20, 10, 0, 0, 0, tzinfo=UTC), True),
         (datetime(2025, 9, 20, 10, 40, 0, 0, tzinfo=UTC), False),
         (datetime(2025, 9, 20, 10, 39, 59, 999_999, tzinfo=UTC), True),
     ],
 )
-def test_should_fetch(last_fetch_time: datetime, *, expected: bool) -> None:
+def test_should_fetch(last_attempt_time: datetime, *, expected: bool) -> None:
     now = datetime(2025, 9, 20, 11, 0, 0, 0, tzinfo=UTC)
-    assert should_fetch(last_fetch_time, now=now) == expected
+    assert should_fetch(last_attempt_time, now=now) == expected
 
 
 def test_fetch_file_index_text_success() -> None:
@@ -231,3 +234,63 @@ def test_exclude_unchanged_files_excludes_unchanged_file() -> None:
     db_records = {"sca20250101.log.gz": 75399, "scc20250101.html.gz": 40758}
     ret = exclude_unchanged_files(file_index, db_records)
     assert ret == {"scc20250101.html.gz": 40759}
+
+
+def test_fetch_archive_uses_archive_attempt_time(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "archive.db"
+    conn = db.open_db(db_path)
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+        db.update_fetch_attempt_time(
+            cursor,
+            fetch_module.FETCH_KIND_ARCHIVE,
+            datetime.now(UTC),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    mock_fetch_file_index_text = Mock()
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        mock_fetch_file_index_text,
+    )
+
+    assert fetch_module.fetch(db_path, archive=True) == -1
+    mock_fetch_file_index_text.assert_not_called()
+
+
+def test_fetch_updates_attempt_time_before_file_index_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "latest.db"
+    fixed_now = datetime(2025, 9, 20, 11, 0, 0, tzinfo=UTC)
+
+    mock_datetime = Mock(wraps=datetime)
+    mock_datetime.now.return_value = fixed_now
+    monkeypatch.setattr(fetch_module, "datetime", mock_datetime)
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(side_effect=OSError("network is unreachable")),
+    )
+
+    with pytest.raises(OSError, match="network is unreachable"):
+        fetch_module.fetch(db_path, archive=False)
+
+    conn = db.open_db(db_path)
+    try:
+        cursor = conn.cursor()
+        last_attempt_time = db.get_fetch_attempt_time(
+            cursor,
+            fetch_module.FETCH_KIND_LATEST,
+        )
+        assert last_attempt_time == fixed_now
+    finally:
+        conn.close()

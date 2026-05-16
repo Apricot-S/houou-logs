@@ -30,8 +30,8 @@ def open_db(db_path: str | Path) -> sqlite3.Connection:
 def setup_table(conn: sqlite3.Connection) -> None:
     with conn:
         create_logs_table(conn)
-        create_last_fetch_time_table(conn)
-        migrate_last_fetch_time_table(conn)
+        create_fetch_state_table(conn)
+        migrate_last_fetch_time_to_fetch_state(conn)
         create_file_index_table(conn)
         create_logs_status_filter_index(conn)
 
@@ -52,7 +52,18 @@ def create_logs_table(conn: sqlite3.Connection) -> None:
     )
 
 
-def create_last_fetch_time_table(conn: sqlite3.Connection) -> None:
+def create_fetch_state_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fetch_state (
+            kind TEXT PRIMARY KEY,
+            last_attempt_time REAL NOT NULL
+        ) WITHOUT ROWID;
+        """,
+    )
+
+
+def migrate_last_fetch_time_to_fetch_state(conn: sqlite3.Connection) -> None:
     cursor = conn.execute(
         """
         SELECT name
@@ -61,52 +72,26 @@ def create_last_fetch_time_table(conn: sqlite3.Connection) -> None:
             AND name='last_fetch_time';
         """,
     )
-    exists = cursor.fetchone() is not None
-    if exists:
+    if cursor.fetchone() is None:
         return
 
-    conn.execute(
-        """
-        CREATE TABLE last_fetch_time (
-            id INTEGER PRIMARY KEY CHECK(id = 1),
-            time REAL NOT NULL
-        );
-        """,
-    )
-    conn.execute(
-        "INSERT INTO last_fetch_time (id, time) VALUES (?, ?);",
-        (1, 0.0),
-    )
-
-
-def migrate_last_fetch_time_table(conn: sqlite3.Connection) -> None:
-    cursor = conn.execute("PRAGMA table_info(last_fetch_time);")
-    columns = [row[1] for row in cursor.fetchall()]
-    if columns != ["time"]:
-        return
-
-    # v1.0.8 and earlier used a single-column table without a constraint
-    # enforcing that only one row can exist.
+    # v1.0.8 and earlier used last_fetch_time for latest fetches only.
     cursor = conn.execute("SELECT MAX(time) FROM last_fetch_time;")
     time = cursor.fetchone()[0]
     if time is None:
         time = 0.0
 
-    conn.execute("ALTER TABLE last_fetch_time RENAME TO last_fetch_time_old;")
     conn.execute(
         """
-        CREATE TABLE last_fetch_time (
-            id INTEGER PRIMARY KEY CHECK(id = 1),
-            time REAL NOT NULL
-        );
+        INSERT INTO fetch_state (kind, last_attempt_time)
+        VALUES (?, ?)
+        ON CONFLICT(kind) DO UPDATE SET
+            last_attempt_time=excluded.last_attempt_time;
         """,
+        ("latest", time),
     )
-    conn.execute(
-        "INSERT INTO last_fetch_time (id, time) VALUES (?, ?);",
-        (1, time),
-    )
-    conn.execute("DROP TABLE last_fetch_time_old;")
-    print("Migrated last_fetch_time table schema.", file=sys.stderr)
+    conn.execute("DROP TABLE last_fetch_time;")
+    print("Migrated last_fetch_time to fetch_state.", file=sys.stderr)
 
 
 def create_file_index_table(conn: sqlite3.Connection) -> None:
@@ -422,24 +407,35 @@ def reset_log_content(cursor: sqlite3.Cursor, log_id: str) -> None:
     )
 
 
-def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
+def update_fetch_attempt_time(
+    cursor: sqlite3.Cursor,
+    kind: str,
+    time: datetime,
+) -> None:
     cursor.execute(
         """
-        UPDATE last_fetch_time SET time = ?
-        WHERE id = 1;
+        INSERT INTO fetch_state (kind, last_attempt_time)
+        VALUES (?, ?)
+        ON CONFLICT(kind) DO UPDATE SET
+            last_attempt_time=excluded.last_attempt_time;
         """,
-        (time.astimezone(UTC).timestamp(),),
+        (kind, time.astimezone(UTC).timestamp()),
     )
 
 
-def get_last_fetch_time(cursor: sqlite3.Cursor) -> datetime:
+def get_fetch_attempt_time(cursor: sqlite3.Cursor, kind: str) -> datetime:
     cursor.execute(
         """
-        SELECT time FROM last_fetch_time
-        WHERE id = 1;
+        SELECT last_attempt_time FROM fetch_state
+        WHERE kind = ?;
         """,
+        (kind,),
     )
-    timestamp = cursor.fetchone()[0]
+    row = cursor.fetchone()
+    if row is None:
+        return datetime.fromtimestamp(0.0, UTC)
+
+    timestamp = row[0]
     return datetime.fromtimestamp(timestamp, UTC)
 
 
