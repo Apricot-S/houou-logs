@@ -16,6 +16,8 @@ from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, extract_log_entries
 from houou_logs.session import TIMEOUT, create_session
 
 MIN_FETCH_INTERVAL = timedelta(minutes=20)
+FETCH_KIND_LATEST = "latest"
+FETCH_KIND_ARCHIVE = "archive"
 
 INDEX_URL_LATEST = "https://tenhou.net/sc/raw/list.cgi"
 INDEX_URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
@@ -30,14 +32,14 @@ EMPTY_FILE_INDEX_PATTERN = re.compile(
 
 
 def should_fetch(
-    last_fetch_time: datetime,
+    last_attempt_time: datetime,
     *,
     now: datetime | None = None,
 ) -> bool:
     if now is None:
         now = datetime.now(tz=UTC)
 
-    return now - last_fetch_time > MIN_FETCH_INTERVAL
+    return now - last_attempt_time > MIN_FETCH_INTERVAL
 
 
 def fetch_file_index_text(session: niquests.Session, url: str) -> str:
@@ -101,10 +103,13 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
         db.setup_table(conn)
         cursor = conn.cursor()
 
-        if not archive:
-            last_fetch_time = db.get_last_fetch_time(cursor)
-            if not should_fetch(last_fetch_time):
-                return -1
+        kind = FETCH_KIND_ARCHIVE if archive else FETCH_KIND_LATEST
+        last_attempt_time = db.get_fetch_attempt_time(cursor, kind)
+        if not should_fetch(last_attempt_time):
+            return -1
+
+        db.update_fetch_attempt_time(cursor, kind, datetime.now(UTC))
+        conn.commit()
 
         with create_session() as session:
             index_url = INDEX_URL_OLD if archive else INDEX_URL_LATEST
@@ -128,9 +133,5 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 db.insert_file_index(cursor, filename, size)
 
                 conn.commit()
-
-        if not archive:
-            now = datetime.now(UTC)
-            db.update_last_fetch_time(cursor, now)
 
     return num_logs
