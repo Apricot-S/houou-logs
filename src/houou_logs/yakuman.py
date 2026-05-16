@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from niquests import Session
+from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.exceptions import UserInputError
@@ -18,6 +19,10 @@ from houou_logs.session import TIMEOUT, create_session
 YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
 
 YKM_ARRAY_PATTERN = re.compile(r"ykm=(\[.*?\]);", re.DOTALL)
+YAKUMAN_LOG_DATE_PATTERN = re.compile(r"^\d{2}/\d{2} \d{2}:\d{2}$")
+YAKUMAN_LOG_ID_PATTERN = re.compile(
+    r"^\d{8}(?:\d{2})?gm-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{8}$",
+)
 
 
 def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
@@ -79,8 +84,8 @@ def extract_ids_from_old_format(ykm_array: list) -> list[tuple[str, str]]:
             or not isinstance(entry[0], str)
             or not isinstance(entry[4], str)
         ):
-            msg = "invalid old ykm array entry"
-            raise RuntimeError(msg)
+            tqdm.write("invalid old ykm array entry")
+            continue
         ids.append((entry[0], entry[4]))
     return ids
 
@@ -116,6 +121,14 @@ def extract_ids(text: str) -> list[tuple[str, str]]:
 
 
 def parse_id(year: int, date: str, log_id: str) -> db.LogEntry:
+    if not YAKUMAN_LOG_DATE_PATTERN.fullmatch(date):
+        msg = f"invalid yakuman log date: {date}"
+        raise ValueError(msg)
+
+    if not YAKUMAN_LOG_ID_PATTERN.fullmatch(log_id):
+        msg = f"invalid yakuman log ID: {log_id}"
+        raise ValueError(msg)
+
     date = f"{year}-{date[0:2]}-{date[3:5]}T{date[6:11]}"
     id_parts = log_id.split("-")
     num_players, is_tonpu = parse_type(id_parts[1])
@@ -131,6 +144,16 @@ def parse_id(year: int, date: str, log_id: str) -> db.LogEntry:
     )
 
 
+def parse_entries(year: int, ids: list[tuple[str, str]]) -> list[db.LogEntry]:
+    entries = []
+    for date, log_id in ids:
+        try:
+            entries.append(parse_id(year, date, log_id))
+        except ValueError as e:
+            tqdm.write(str(e))
+    return entries
+
+
 def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
     validate_yakuman_log_date(year, month, now)
 
@@ -143,7 +166,7 @@ def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
             resp = fetch_yakuman_log_ids_text(session, url)
 
             ids = extract_ids(resp)
-            entries = [parse_id(year, i[0], i[1]) for i in ids]
+            entries = parse_entries(year, ids)
 
             db.insert_log_entries(cursor, entries)
             num_logs = len(entries)
