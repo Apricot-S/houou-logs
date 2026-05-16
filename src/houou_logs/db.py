@@ -448,6 +448,44 @@ def get_file_index(cursor: sqlite3.Cursor) -> dict[str, int]:
     return dict(cursor.fetchall())
 
 
+def list_changed_file_index(
+    cursor: sqlite3.Cursor,
+    file_index: dict[str, int],
+) -> dict[str, int]:
+    if not file_index:
+        return {}
+
+    try:
+        cursor.execute(
+            """
+            CREATE TEMP TABLE input_file_index (
+                file TEXT PRIMARY KEY,
+                size INTEGER NOT NULL CHECK(size > 0)
+            ) WITHOUT ROWID;
+            """,
+        )
+        cursor.executemany(
+            """
+            INSERT INTO input_file_index(file, size)
+            VALUES (?, ?);
+            """,
+            file_index.items(),
+        )
+        cursor.execute(
+            """
+            SELECT input.file, input.size
+            FROM input_file_index AS input
+            LEFT JOIN file_index AS stored
+                ON stored.file = input.file
+                AND stored.size = input.size
+            WHERE stored.file IS NULL;
+            """,
+        )
+        return dict(cursor.fetchall())
+    finally:
+        cursor.execute("DROP TABLE IF EXISTS input_file_index;")
+
+
 def insert_file_index(cursor: sqlite3.Cursor, file: str, size: int) -> None:
     cursor.execute(
         """

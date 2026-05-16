@@ -118,8 +118,7 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
             file_index = parse_file_index(resp)
             file_index = filter_houou_files(file_index)
 
-            db_records = db.get_file_index(cursor)
-            changed_files = exclude_unchanged_files(file_index, db_records)
+            changed_files = db.list_changed_file_index(cursor, file_index)
 
             for filename, size in tqdm(changed_files.items()):
                 url = f"{LOG_DOWNLOAD_URL}{filename}"
