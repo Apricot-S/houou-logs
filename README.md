@@ -2,6 +2,13 @@
 
 Tools to download Houou (Phoenix) logs from tenhou.net
 
+> [!CAUTION]
+> Tenhou prohibits redistribution of game logs. Do not publish, share, mirror, or redistribute downloaded log data.
+>
+> Source:
+>
+> - <https://x.com/i/status/2052271028982931548>
+
 > [!WARNING]
 > Tenhou allows only **one session** to download logs at a time.  
 > Running multiple instances (e.g., via multiple terminals or background processes) **violates Tenhou's terms of use** and may result in access restrictions or bans.
@@ -49,20 +56,23 @@ Import log IDs for the year 2009.
 2. Place the file in the current working directory.
 3. Run:
 
-```sh
-houou-logs import db/2009.db scraw2009.zip
-```
+    ```sh
+    houou-logs import db/2009.db scraw2009.zip
+    ```
 
 ### Fetch latest log IDs
 
 Fetch a list of log IDs into the database.
 
-This command skips log files that are already fetched and have the same size, and only adds new log IDs to the database.
+This command uses Tenhou's FileIndex sizes to skip log files that are already fetched and unchanged.
+
+It also follows Tenhou's 20-minute minimum update interval.
+The default mode and archive mode track their last FileIndex attempt times separately.
+If the same mode is executed again within 20 minutes, the command exits without fetching the FileIndex.
+
+A failed FileIndex request is still recorded as an attempt, so repeated automated runs do not immediately retry against Tenhou.
 
 #### Fetch log IDs from the latest 7 days (default mode)
-
-> [!NOTE]
-> In this mode, if executed again within 20 minutes from the last run, the process will be cancelled because there are no updates.
 
 ```sh
 houou-logs fetch <db-path>
@@ -71,7 +81,7 @@ houou-logs fetch <db-path>
 Example:
 
 ```sh
-houou-logs fetch db/latest.db
+houou-logs fetch db/current-year.db
 ```
 
 #### Fetch log IDs from January 1 of the current year until 7 days before the current day (archive mode)
@@ -83,7 +93,7 @@ houou-logs fetch <db-path> --archive
 Example:
 
 ```sh
-houou-logs fetch db/latest.db --archive
+houou-logs fetch db/current-year.db --archive
 ```
 
 ### Fetch yakuman log IDs
@@ -103,7 +113,7 @@ houou-logs yakuman <db-path> <year> <month>
 Example:
 
 ```sh
-houou-logs yakuman db/yakuman/2007/01.db 2007 01
+houou-logs yakuman db/yakuman.db 2007 01
 ```
 
 ### Download log contents
@@ -111,6 +121,9 @@ houou-logs yakuman db/yakuman/2007/01.db 2007 01
 Download the log contents (mjlog) into the database using previously fetched log IDs.
 
 This command skips logs that are already downloaded and stored, and only fetches log contents for undownloaded IDs that match the specified conditions.
+
+If a log cannot be downloaded, the entry is still marked as processed with an error flag.
+Such entries are skipped by later `download` runs unless they are reset to the undownloaded state.
 
 ```sh
 houou-logs download <db-path> [--players <PLAYERS>] [--length <LENGTH>] [--limit <LIMIT>]
@@ -135,6 +148,9 @@ houou-logs download db/2024.db --players 3 --length h --limit 50
 
 Validate that all downloaded mjlog XML in the database can be parsed correctly.
 
+If an invalid or unreadable log is found, this command resets that log entry to the undownloaded state.
+This allows a later `download` run to fetch it again.
+
 In addition to validation, this command also serves as a practical example of how to parse mjlog XML at the tag level.
 
 ```sh
@@ -152,6 +168,7 @@ houou-logs validate db/2024.db
 Export downloaded log contents (mjlog in XML format) from the database into files.
 
 This command writes each log as an individual `.xml` file under the specified output directory.
+If an output file already exists, it is overwritten.
 It skips logs that do not match the given conditions, and supports paging with `--limit` and `--offset` for batch processing.
 
 ```sh

@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import sqlite3
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,8 +30,10 @@ def open_db(db_path: str | Path) -> sqlite3.Connection:
 def setup_table(conn: sqlite3.Connection) -> None:
     with conn:
         create_logs_table(conn)
-        create_last_fetch_time_table(conn)
+        create_fetch_state_table(conn)
+        migrate_last_fetch_time_to_fetch_state(conn)
         create_file_index_table(conn)
+        create_logs_status_filter_index(conn)
 
 
 def create_logs_table(conn: sqlite3.Connection) -> None:
@@ -49,7 +52,18 @@ def create_logs_table(conn: sqlite3.Connection) -> None:
     )
 
 
-def create_last_fetch_time_table(conn: sqlite3.Connection) -> None:
+def create_fetch_state_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS fetch_state (
+            kind TEXT PRIMARY KEY,
+            last_attempt_time REAL NOT NULL
+        ) WITHOUT ROWID;
+        """,
+    )
+
+
+def migrate_last_fetch_time_to_fetch_state(conn: sqlite3.Connection) -> None:
     cursor = conn.execute(
         """
         SELECT name
@@ -58,12 +72,26 @@ def create_last_fetch_time_table(conn: sqlite3.Connection) -> None:
             AND name='last_fetch_time';
         """,
     )
-    exists = cursor.fetchone() is not None
-    if exists:
+    if cursor.fetchone() is None:
         return
 
-    conn.execute("CREATE TABLE last_fetch_time (time REAL);")
-    conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (0.0,))
+    # v1.0.8 and earlier used last_fetch_time for latest fetches only.
+    cursor = conn.execute("SELECT MAX(time) FROM last_fetch_time;")
+    time = cursor.fetchone()[0]
+    if time is None:
+        time = 0.0
+
+    conn.execute(
+        """
+        INSERT INTO fetch_state (kind, last_attempt_time)
+        VALUES (?, ?)
+        ON CONFLICT(kind) DO UPDATE SET
+            last_attempt_time=excluded.last_attempt_time;
+        """,
+        ("latest", time),
+    )
+    conn.execute("DROP TABLE last_fetch_time;")
+    print("Migrated last_fetch_time to fetch_state.", file=sys.stderr)
 
 
 def create_file_index_table(conn: sqlite3.Connection) -> None:
@@ -73,6 +101,15 @@ def create_file_index_table(conn: sqlite3.Connection) -> None:
             file TEXT PRIMARY KEY,
             size INTEGER NOT NULL CHECK(size > 0)
         ) WITHOUT ROWID;
+        """,
+    )
+
+
+def create_logs_status_filter_index(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_logs_status_filter
+        ON logs (is_processed, was_error, num_players, is_tonpu, id);
         """,
     )
 
@@ -101,23 +138,18 @@ def insert_log_entries(
         """
         INSERT INTO logs (id, date, num_players, is_tonpu, is_processed, was_error, log)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            date=excluded.date,
-            num_players=excluded.num_players,
-            is_tonpu=excluded.is_tonpu,
-            is_processed=excluded.is_processed,
-            was_error=excluded.was_error,
-            log=excluded.log;
+        ON CONFLICT(id) DO NOTHING;
         """,  # noqa: E501
         values,
     )
 
 
-def get_undownloaded_log_ids(
+def list_undownloaded_log_ids_after(
     cursor: sqlite3.Cursor,
     players: int | None,
     length: str | None,
-    limit: int | None,
+    after_id: str | None,
+    limit: int,
 ) -> list[str]:
     conditions = ["is_processed = 0", "was_error = 0"]
     params: list = []
@@ -136,21 +168,57 @@ def get_undownloaded_log_ids(
                 msg = f"unknown length: {length}"
                 raise ValueError(msg)
 
+    if after_id is not None:
+        conditions.append("id > ?")
+        params.append(after_id)
+
     sql = f"""
         SELECT id
         FROM logs
         WHERE {" AND ".join(conditions)}
         ORDER BY id ASC
+        LIMIT ?
         """  # noqa: S608
-
-    if limit is not None:
-        sql += " LIMIT ?"
-        params.append(limit)
+    params.append(limit)
 
     cursor.execute(sql, params)
-    rows = cursor.fetchall()
+    return [row[0] for row in cursor.fetchall()]
 
-    return [row[0] for row in rows]
+
+def count_undownloaded_log_ids(
+    cursor: sqlite3.Cursor,
+    players: int | None,
+    length: str | None,
+    limit: int | None,
+) -> int:
+    conditions = ["is_processed = 0", "was_error = 0"]
+    params: list = []
+
+    if players is not None:
+        conditions.append("num_players = ?")
+        params.append(players)
+
+    if length is not None:
+        match length:
+            case "t":
+                conditions.append("is_tonpu = 1")
+            case "h":
+                conditions.append("is_tonpu = 0")
+            case _:
+                msg = f"unknown length: {length}"
+                raise ValueError(msg)
+
+    sql = f"""
+        SELECT COUNT(*)
+        FROM logs
+        WHERE {" AND ".join(conditions)}
+        """  # noqa: S608
+
+    cursor.execute(sql, params)
+    count = cursor.fetchone()[0]
+    if limit is not None:
+        return min(count, limit)
+    return count
 
 
 def update_log_entries(
@@ -159,27 +227,16 @@ def update_log_entries(
     was_error: bool,  # noqa: FBT001
     log: bytes | None,
 ) -> None:
-    cursor.execute(
+    result = cursor.execute(
         """
         UPDATE logs SET is_processed = 1, was_error = ?, log = ?
         WHERE id = ?;
         """,
         (int(was_error), log, log_id),
     )
-
-
-def iter_all_log_contents(
-    cursor: sqlite3.Cursor,
-) -> Iterator[tuple[str, bytes]]:
-    cursor.execute(
-        """
-        SELECT id, log
-        FROM logs
-        WHERE is_processed = 1
-        ORDER BY id ASC
-        """,
-    )
-    yield from cursor
+    if result.rowcount != 1:
+        msg = f"log entry not found: {log_id}"
+        raise RuntimeError(msg)
 
 
 def count_all_log_contents(cursor: sqlite3.Cursor) -> int:
@@ -303,20 +360,22 @@ def count_log_contents(
                 msg = f"unknown length: {length}"
                 raise ValueError(msg)
 
-    inner_sql = f"""
-        SELECT id
+    sql = f"""
+        SELECT COUNT(*)
         FROM logs
         WHERE {" AND ".join(conditions)}
-        ORDER BY id ASC
         """  # noqa: S608
 
-    if limit is not None:
-        inner_sql += " LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-
-    sql = f"SELECT COUNT(*) FROM ({inner_sql})"  # noqa: S608
     cursor.execute(sql, params)
-    return cursor.fetchone()[0]
+    count = cursor.fetchone()[0]
+
+    if offset > 0:
+        count = max(count - offset, 0)
+
+    if limit is not None:
+        return min(count, limit)
+
+    return count
 
 
 def count_all_ids(cursor: sqlite3.Cursor) -> int:
@@ -334,32 +393,74 @@ def reset_log_content(cursor: sqlite3.Cursor, log_id: str) -> None:
     )
 
 
-def update_last_fetch_time(cursor: sqlite3.Cursor, time: datetime) -> None:
+def update_fetch_attempt_time(
+    cursor: sqlite3.Cursor,
+    kind: str,
+    time: datetime,
+) -> None:
     cursor.execute(
         """
-        UPDATE last_fetch_time SET time = ?;
+        INSERT INTO fetch_state (kind, last_attempt_time)
+        VALUES (?, ?)
+        ON CONFLICT(kind) DO UPDATE SET
+            last_attempt_time=excluded.last_attempt_time;
         """,
-        (time.astimezone(UTC).timestamp(),),
+        (kind, time.astimezone(UTC).timestamp()),
     )
 
 
-def get_last_fetch_time(cursor: sqlite3.Cursor) -> datetime:
+def get_fetch_attempt_time(cursor: sqlite3.Cursor, kind: str) -> datetime:
     cursor.execute(
         """
-        SELECT time FROM last_fetch_time;
+        SELECT last_attempt_time FROM fetch_state
+        WHERE kind = ?;
         """,
+        (kind,),
     )
-    timestamp = cursor.fetchone()[0]
+    row = cursor.fetchone()
+    if row is None:
+        return datetime.fromtimestamp(0.0, UTC)
+
+    timestamp = row[0]
     return datetime.fromtimestamp(timestamp, UTC)
 
 
-def get_file_index(cursor: sqlite3.Cursor) -> dict[str, int]:
-    cursor.execute(
-        """
-        SELECT file, size FROM file_index;
-        """,
-    )
-    return dict(cursor.fetchall())
+def list_changed_file_index(
+    cursor: sqlite3.Cursor,
+    file_index: dict[str, int],
+) -> dict[str, int]:
+    if not file_index:
+        return {}
+
+    try:
+        cursor.execute(
+            """
+            CREATE TEMP TABLE input_file_index (
+                file TEXT PRIMARY KEY,
+                size INTEGER NOT NULL CHECK(size > 0)
+            ) WITHOUT ROWID;
+            """,
+        )
+        cursor.executemany(
+            """
+            INSERT INTO input_file_index(file, size)
+            VALUES (?, ?);
+            """,
+            file_index.items(),
+        )
+        cursor.execute(
+            """
+            SELECT input.file, input.size
+            FROM input_file_index AS input
+            LEFT JOIN file_index AS stored
+                ON stored.file = input.file
+                AND stored.size = input.size
+            WHERE stored.file IS NULL;
+            """,
+        )
+        return dict(cursor.fetchall())
+    finally:
+        cursor.execute("DROP TABLE IF EXISTS input_file_index;")
 
 
 def insert_file_index(cursor: sqlite3.Cursor, file: str, size: int) -> None:

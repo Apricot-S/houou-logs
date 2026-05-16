@@ -2,13 +2,35 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import sqlite3
 import sys
+import xml.etree.ElementTree as ET
+import zipfile
+import zlib
 from argparse import ArgumentParser, Namespace
 from datetime import UTC, datetime
+from gzip import BadGzipFile
 from pathlib import Path
+
+from niquests.exceptions import RequestException
 
 from houou_logs import download, export, fetch, import_, validate, yakuman
 from houou_logs.exceptions import UserInputError
+
+IO_ERROR_EXIT_CODE = 1
+USER_INPUT_ERROR_EXIT_CODE = 2
+INTERRUPTED_EXIT_CODE = 130
+EXTERNAL_IO_ERRORS = (
+    OSError,
+    sqlite3.Error,
+    BadGzipFile,
+    EOFError,
+    zlib.error,
+    zipfile.BadZipFile,
+    ET.ParseError,
+    UnicodeDecodeError,
+    RequestException,
+)
 
 
 def set_import_args(parser: ArgumentParser) -> ArgumentParser:
@@ -204,6 +226,11 @@ def export_cli(args: Namespace) -> None:
     print(f"Number of logs exported: {num_logs}", file=sys.stderr)
 
 
+def format_external_io_error(error: Exception) -> str:
+    message = str(error) or error.__class__.__name__
+    return f"I/O error: {message}"
+
+
 def main() -> None:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -240,9 +267,15 @@ def main() -> None:
 
     try:
         args.func(args)
+    except KeyboardInterrupt:
+        print("Interrupted by user.", file=sys.stderr)
+        sys.exit(INTERRUPTED_EXIT_CODE)
     except UserInputError as e:
         print(f"Error: {e}", file=sys.stderr)
-        sys.exit(2)
+        sys.exit(USER_INPUT_ERROR_EXIT_CODE)
+    except EXTERNAL_IO_ERRORS as e:
+        print(format_external_io_error(e), file=sys.stderr)
+        sys.exit(IO_ERROR_EXIT_CODE)
 
 
 if __name__ == "__main__":

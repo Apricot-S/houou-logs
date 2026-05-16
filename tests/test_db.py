@@ -140,11 +140,52 @@ def test_setup_table_creates_logs_table() -> None:
         conn.close()
 
 
-def test_setup_table_creates_last_fetch_time_table() -> None:
+def test_setup_table_creates_fetch_state_table() -> None:
     conn = db.open_db(":memory:")
 
     try:
         db.setup_table(conn)
+
+        cursor = conn.execute(
+            """
+                SELECT name
+                FROM sqlite_master
+                WHERE type='table'
+                AND name='fetch_state';
+            """,
+        )
+        table = cursor.fetchone()
+        assert table is not None
+        assert table[0] == "fetch_state"
+
+        cursor = conn.execute("PRAGMA table_info(fetch_state);")
+        columns = [row[1] for row in cursor.fetchall()]
+        assert columns == ["kind", "last_attempt_time"]
+    finally:
+        conn.close()
+
+
+def test_setup_table_migrates_legacy_last_fetch_time_to_fetch_state(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        conn.execute("CREATE TABLE last_fetch_time (time REAL);")
+        conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (1.0,))
+        conn.execute("INSERT INTO last_fetch_time (time) VALUES (?);", (2.0,))
+        conn.commit()
+
+        db.setup_table(conn)
+
+        cursor = conn.execute("PRAGMA table_info(fetch_state);")
+        columns = [row[1] for row in cursor.fetchall()]
+        assert columns == ["kind", "last_attempt_time"]
+
+        cursor = conn.execute(
+            "SELECT kind, last_attempt_time FROM fetch_state;",
+        )
+        assert cursor.fetchall() == [("latest", 2.0)]
 
         cursor = conn.execute(
             """
@@ -154,9 +195,10 @@ def test_setup_table_creates_last_fetch_time_table() -> None:
                 AND name='last_fetch_time';
             """,
         )
-        table = cursor.fetchone()
-        assert table is not None
-        assert table[0] == "last_fetch_time"
+        assert cursor.fetchone() is None
+
+        captured = capsys.readouterr()
+        assert captured.err == "Migrated last_fetch_time to fetch_state.\n"
     finally:
         conn.close()
 
@@ -178,6 +220,27 @@ def test_setup_table_creates_file_index_table() -> None:
         table = cursor.fetchone()
         assert table is not None
         assert table[0] == "file_index"
+    finally:
+        conn.close()
+
+
+def test_setup_table_creates_logs_status_filter_index() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+
+        cursor = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='index'
+                AND name='idx_logs_status_filter';
+            """,
+        )
+        index = cursor.fetchone()
+        assert index is not None
+        assert index[0] == "idx_logs_status_filter"
     finally:
         conn.close()
 
@@ -220,11 +283,114 @@ def test_insert_log_entries() -> None:
         conn.close()
 
 
-def test_get_undownloaded_log_ids(conn_test_db: sqlite3.Connection) -> None:
+def test_insert_log_entries_keeps_existing_row_on_conflict() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        log_id = "2009010100gm-00a9-0000-00000000"
+        entry = db.LogEntry(
+            id=log_id,
+            date="2009-01-01",
+            num_players=4,
+            is_tonpu=False,
+            is_processed=True,
+            was_error=False,
+            log=b"downloaded log",
+        )
+        db.insert_log_entries(cursor, [entry])
+        conn.commit()
+
+        refreshed_entry = db.LogEntry(
+            id=log_id,
+            date="2009-01-02",
+            num_players=3,
+            is_tonpu=True,
+            is_processed=False,
+            was_error=True,
+            log=None,
+        )
+        db.insert_log_entries(cursor, [refreshed_entry])
+        conn.commit()
+
+        cursor.execute("SELECT * FROM logs WHERE id = ?;", (log_id,))
+        actual = cursor.fetchone()
+        expected = (
+            log_id,
+            "2009-01-01",
+            4,
+            0,
+            1,
+            0,
+            b"downloaded log",
+        )
+        assert actual == expected
+    finally:
+        conn.close()
+
+
+def test_list_undownloaded_log_ids_after() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+        entries = [
+            db.LogEntry(
+                id="2009010100gm-00a9-0000-00000000",
+                date="2009-01-01",
+                num_players=4,
+                is_tonpu=False,
+                is_processed=False,
+                was_error=False,
+                log=None,
+            ),
+            db.LogEntry(
+                id="2009010101gm-00a9-0000-00000000",
+                date="2009-01-01",
+                num_players=4,
+                is_tonpu=False,
+                is_processed=False,
+                was_error=False,
+                log=None,
+            ),
+            db.LogEntry(
+                id="2009010102gm-00a9-0000-00000000",
+                date="2009-01-01",
+                num_players=4,
+                is_tonpu=False,
+                is_processed=False,
+                was_error=False,
+                log=None,
+            ),
+        ]
+        db.insert_log_entries(cursor, entries)
+        conn.commit()
+
+        actual = db.list_undownloaded_log_ids_after(
+            cursor,
+            None,
+            None,
+            "2009010100gm-00a9-0000-00000000",
+            2,
+        )
+        expected = [
+            "2009010101gm-00a9-0000-00000000",
+            "2009010102gm-00a9-0000-00000000",
+        ]
+        assert actual == expected
+    finally:
+        conn.close()
+
+
+def test_count_undownloaded_log_ids_with_limit(
+    conn_test_db: sqlite3.Connection,
+) -> None:
     cursor = conn_test_db.cursor()
-    actual = db.get_undownloaded_log_ids(cursor, None, None, None)
-    expected = ["2009010100gm-00a9-0000-00000000"]
-    assert actual == expected
+    actual = db.count_undownloaded_log_ids(cursor, None, None, 1)
+    assert actual == 1
 
 
 def test_update_log_entries() -> None:
@@ -269,14 +435,22 @@ def test_update_log_entries() -> None:
         conn.close()
 
 
-def test_iter_all_log_contents(conn_test_db: sqlite3.Connection) -> None:
-    cursor = conn_test_db.cursor()
-    actual = list(db.iter_all_log_contents(cursor))
-    expected = [
-        ("2013020100gm-00f1-0000-00000000", b"broken log data"),
-        ("2013020101gm-00f1-0000-00000000", b"sample log data"),
-    ]
-    assert actual == expected
+def test_update_log_entries_rejects_missing_id() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        with pytest.raises(RuntimeError, match="log entry not found"):
+            db.update_log_entries(
+                cursor,
+                "2009010100gm-00a9-0000-00000000",
+                True,  # noqa: FBT003
+                b"sample",
+            )
+    finally:
+        conn.close()
 
 
 def test_count_all_log_contents(conn_test_db: sqlite3.Connection) -> None:
@@ -296,6 +470,14 @@ def test_count_log_contents(conn_test_db: sqlite3.Connection) -> None:
     cursor = conn_test_db.cursor()
     actual = db.count_log_contents(cursor, None, None, None, 0)
     assert actual == 1
+
+
+def test_count_log_contents_applies_limit_and_offset(
+    conn_test_db: sqlite3.Connection,
+) -> None:
+    cursor = conn_test_db.cursor()
+    actual = db.count_log_contents(cursor, None, None, 1, 1)
+    assert actual == 0
 
 
 def test_count_all_ids(conn_test_db: sqlite3.Connection) -> None:
@@ -342,7 +524,7 @@ def test_reset_log_content() -> None:
         conn.close()
 
 
-def test_update_last_fetch_time() -> None:
+def test_update_fetch_attempt_time() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -353,17 +535,17 @@ def test_update_last_fetch_time() -> None:
         time = datetime(2025, 9, 20, 10, 30, 40, 500, tzinfo=zone_info)
         timestamp = time.astimezone(UTC).timestamp()
 
-        db.update_last_fetch_time(cursor, time)
+        db.update_fetch_attempt_time(cursor, "latest", time)
         conn.commit()
 
-        cursor.execute("SELECT * FROM last_fetch_time;")
+        cursor.execute("SELECT kind, last_attempt_time FROM fetch_state;")
         rows = cursor.fetchall()
-        assert rows[0][0] == timestamp
+        assert rows == [("latest", timestamp)]
     finally:
         conn.close()
 
 
-def test_update_last_fetch_time_has_only_one_row() -> None:
+def test_update_fetch_attempt_time_has_only_one_row_per_kind() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -374,18 +556,43 @@ def test_update_last_fetch_time_has_only_one_row() -> None:
         time1 = datetime(2025, 9, 20, 10, 30, 40, 500, tzinfo=zone_info)
         time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
 
-        db.update_last_fetch_time(cursor, time1)
-        db.update_last_fetch_time(cursor, time2)
+        db.update_fetch_attempt_time(cursor, "latest", time1)
+        db.update_fetch_attempt_time(cursor, "latest", time2)
         conn.commit()
 
-        cursor.execute("SELECT * FROM last_fetch_time;")
+        cursor.execute("SELECT last_attempt_time FROM fetch_state;")
         rows = cursor.fetchall()
         assert len(rows) == 1
     finally:
         conn.close()
 
 
-def test_update_last_fetch_time_has_only_last_time() -> None:
+def test_fetch_state_allows_latest_and_archive_rows() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        db.update_fetch_attempt_time(
+            cursor,
+            "latest",
+            datetime(2025, 9, 20, tzinfo=UTC),
+        )
+        db.update_fetch_attempt_time(
+            cursor,
+            "archive",
+            datetime(2025, 9, 21, tzinfo=UTC),
+        )
+        conn.commit()
+
+        cursor.execute("SELECT kind FROM fetch_state ORDER BY kind;")
+        assert cursor.fetchall() == [("archive",), ("latest",)]
+    finally:
+        conn.close()
+
+
+def test_update_fetch_attempt_time_has_only_last_time() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -397,30 +604,30 @@ def test_update_last_fetch_time_has_only_last_time() -> None:
         time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
         timestamp = time2.astimezone(UTC).timestamp()
 
-        db.update_last_fetch_time(cursor, time1)
-        db.update_last_fetch_time(cursor, time2)
+        db.update_fetch_attempt_time(cursor, "latest", time1)
+        db.update_fetch_attempt_time(cursor, "latest", time2)
         conn.commit()
 
-        cursor.execute("SELECT * FROM last_fetch_time;")
+        cursor.execute("SELECT last_attempt_time FROM fetch_state;")
         rows = cursor.fetchall()
         assert rows[0][0] == timestamp
     finally:
         conn.close()
 
 
-def test_get_last_fetch_time_never_fetched() -> None:
+def test_get_fetch_attempt_time_never_fetched() -> None:
     conn = db.open_db(":memory:")
 
     try:
         db.setup_table(conn)
         cursor = conn.cursor()
-        last_fetch_time = db.get_last_fetch_time(cursor)
-        assert last_fetch_time.astimezone(UTC).timestamp() == 0.0
+        last_attempt_time = db.get_fetch_attempt_time(cursor, "archive")
+        assert last_attempt_time.astimezone(UTC).timestamp() == 0.0
     finally:
         conn.close()
 
 
-def test_get_last_fetch_time_2_times_updated() -> None:
+def test_get_fetch_attempt_time_2_times_updated() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -431,25 +638,74 @@ def test_get_last_fetch_time_2_times_updated() -> None:
         time2 = datetime(2025, 9, 21, 10, 30, 40, 500, tzinfo=zone_info)
         timestamp = time2.astimezone(UTC).timestamp()
 
-        db.update_last_fetch_time(cursor, time1)
-        db.update_last_fetch_time(cursor, time2)
+        db.update_fetch_attempt_time(cursor, "latest", time1)
+        db.update_fetch_attempt_time(cursor, "latest", time2)
         conn.commit()
 
-        last_fetch_time = db.get_last_fetch_time(cursor)
-        assert last_fetch_time.astimezone(UTC).timestamp() == timestamp
+        last_attempt_time = db.get_fetch_attempt_time(cursor, "latest")
+        assert last_attempt_time.astimezone(UTC).timestamp() == timestamp
     finally:
         conn.close()
 
 
-def test_get_file_index_empty() -> None:
+def test_list_changed_file_index_empty_input() -> None:
     conn = db.open_db(":memory:")
 
     try:
         db.setup_table(conn)
         cursor = conn.cursor()
 
-        file_index = db.get_file_index(cursor)
+        file_index = db.list_changed_file_index(cursor, {})
         assert file_index == {}
+    finally:
+        conn.close()
+
+
+def test_list_changed_file_index_returns_missing_and_resized_files() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        file1 = "scc20250512.html.gz"
+        size1 = 30045
+        file2 = "scc20250513.html.gz"
+        size2 = 32538
+        file3 = "scc20250514.html.gz"
+        db.insert_file_index(cursor, file1, size1)
+        db.insert_file_index(cursor, file2, size2)
+        db.insert_file_index(cursor, file3, 27149)
+
+        file_index = db.list_changed_file_index(
+            cursor,
+            {
+                file1: size1,
+                file2: size2 + 1,
+                "missing.html.gz": 1,
+            },
+        )
+        assert file_index == {file2: size2 + 1, "missing.html.gz": 1}
+    finally:
+        conn.close()
+
+
+def test_list_changed_file_index_handles_many_files() -> None:
+    conn = db.open_db(":memory:")
+
+    try:
+        db.setup_table(conn)
+        cursor = conn.cursor()
+
+        files = [f"scc2025{i:04d}.html.gz" for i in range(501)]
+        for i, file in enumerate(files):
+            db.insert_file_index(cursor, file, i + 1)
+
+        input_file_index = {file: i + 1 for i, file in enumerate(files)}
+        input_file_index[files[-1]] = 502
+
+        file_index = db.list_changed_file_index(cursor, input_file_index)
+        assert file_index == {files[-1]: 502}
     finally:
         conn.close()
 
@@ -465,7 +721,8 @@ def test_insert_file_index_new() -> None:
         size = 30045
         db.insert_file_index(cursor, file, size)
 
-        file_index = db.get_file_index(cursor)
+        cursor.execute("SELECT file, size FROM file_index;")
+        file_index = dict(cursor.fetchall())
         assert file_index[file] == size
     finally:
         conn.close()
@@ -484,7 +741,8 @@ def test_insert_file_index_update() -> None:
         db.insert_file_index(cursor, file, size1)
         db.insert_file_index(cursor, file, size2)
 
-        file_index = db.get_file_index(cursor)
+        cursor.execute("SELECT file, size FROM file_index;")
+        file_index = dict(cursor.fetchall())
         assert file_index[file] == size2
     finally:
         conn.close()
@@ -504,7 +762,8 @@ def test_insert_file_index_multiple() -> None:
         size2 = 32538
         db.insert_file_index(cursor, file2, size2)
 
-        file_index = db.get_file_index(cursor)
+        cursor.execute("SELECT file, size FROM file_index;")
+        file_index = dict(cursor.fetchall())
         assert file_index[file1] == size1
         assert file_index[file2] == size2
     finally:

@@ -11,6 +11,7 @@ from houou_logs.exceptions import UserInputError
 from houou_logs.yakuman import (
     build_url,
     extract_ids,
+    parse_entries,
     parse_id,
     validate_yakuman_log_date,
 )
@@ -87,6 +88,39 @@ sw();
         extract_ids(text)
 
 
+def test_extract_ids_raises_error_when_ykm_is_malformed() -> None:
+    text = """total=580570;
+updated="2025/02/01 00:12";
+ykm=[foo];
+sw();
+"""
+
+    with pytest.raises(RuntimeError, match="failed to parse ykm array"):
+        extract_ids(text)
+
+
+def test_extract_ids_new_format_rejects_invalid_length() -> None:
+    text = """total=580570;
+updated="2025/02/01 00:12";
+ykm=['01/31 23:57','etra'];
+sw();
+"""
+
+    with pytest.raises(RuntimeError, match="invalid new ykm array length"):
+        extract_ids(text)
+
+
+def test_extract_ids_new_format_rejects_invalid_entry() -> None:
+    text = """total=580570;
+updated="2025/02/01 00:12";
+ykm=['01/31 23:57','etra','[1]',[39],123];
+sw();
+"""
+
+    with pytest.raises(TypeError, match="invalid new ykm array entry"):
+        extract_ids(text)
+
+
 def test_extract_ids_old_format() -> None:
     text = """total=451693;
 
@@ -109,6 +143,21 @@ sw();
         ("01/31 23:52", "2008013123gm-0009-0000-5ab263c2"),
     ]
     assert extract_ids(text) == ids
+
+
+def test_extract_ids_old_format_skips_invalid_entry() -> None:
+    text = """total=451693;
+updated="2008/02/01 01:17";
+ykm=[
+['01/31 23:58','りょぬの']
+,['01/31 23:52','mej2',[9,[20,22,23,56,58,59,65,66,67,81,83],[24064],59],[40],'2008013123gm-0009-0000-5ab263c2',1,5]
+];
+sw();
+"""  # noqa: E501
+
+    assert extract_ids(text) == [
+        ("01/31 23:52", "2008013123gm-0009-0000-5ab263c2"),
+    ]
 
 
 def test_parse_id_new_format() -> None:
@@ -145,3 +194,51 @@ def test_parse_id_old_format() -> None:
     )
 
     assert parse_id(year, date, log_id) == entry
+
+
+def test_parse_id_accepts_legacy_yakuman_log_id_without_hour() -> None:
+    year = 2007
+    date = "04/16 08:15"
+    log_id = "20070416gm-0041-0000-56a0738f"
+    entry = LogEntry(
+        log_id,
+        "2007-04-16T08:15",
+        4,
+        is_tonpu=True,
+        is_processed=False,
+        was_error=False,
+        log=None,
+    )
+
+    assert parse_id(year, date, log_id) == entry
+
+
+def test_parse_id_rejects_invalid_yakuman_log_id() -> None:
+    with pytest.raises(ValueError, match="invalid yakuman log ID: invalid"):
+        parse_id(2007, "04/16 08:15", "invalid")
+
+
+def test_parse_id_rejects_invalid_yakuman_log_date() -> None:
+    with pytest.raises(ValueError, match="invalid yakuman log date: invalid"):
+        parse_id(2007, "invalid", "2007041610gm-00c1-0000-75574173")
+
+
+def test_parse_entries_skips_invalid_yakuman_log_id() -> None:
+    ids = [
+        ("04/16 08:15", "invalid"),
+        ("04/16 10:27", "2007041610gm-00c1-0000-75574173"),
+    ]
+
+    entries = parse_entries(2007, ids)
+
+    assert entries == [
+        LogEntry(
+            "2007041610gm-00c1-0000-75574173",
+            "2007-04-16T10:27",
+            4,
+            is_tonpu=True,
+            is_processed=False,
+            was_error=False,
+            log=None,
+        ),
+    ]

@@ -6,11 +6,16 @@ import gzip
 import re
 from typing import IO
 
+from tqdm import tqdm
+
 from houou_logs.db import LogEntry
 
 HOUOU_ARCHIVE_PREFIX = "scc"
 
 LINE_PATTERN = re.compile(r'^(\d{2}:\d{2}).*?log=([^">]+)', re.MULTILINE)
+LOG_ID_PATTERN = re.compile(
+    r"^\d{10}gm-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{8}$",
+)
 
 TYPE_IS_HANCHAN = 0x008
 TYPE_IS_3_PLAYERS = 0x010
@@ -41,6 +46,10 @@ def parse_type(log_type: str) -> tuple[int, bool]:
 
 
 def parse_id(time: str, log_id: str) -> LogEntry:
+    if not LOG_ID_PATTERN.fullmatch(log_id):
+        msg = f"invalid log ID: {log_id}"
+        raise ValueError(msg)
+
     date = parse_date(time, log_id[0:8])
     num_players, is_tonpu = parse_type(log_id[13:17])
 
@@ -64,4 +73,10 @@ def extract_log_entries(filename: str, fileobj: IO[bytes]) -> list[LogEntry]:
         text = fileobj.read().decode("utf-8")
 
     ids = extract_ids(text)
-    return [parse_id(i[0], i[1]) for i in ids]
+    entries = []
+    for time, log_id in ids:
+        try:
+            entries.append(parse_id(time, log_id))
+        except ValueError as e:
+            tqdm.write(f"{filename}: {e}")
+    return entries

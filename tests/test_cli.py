@@ -11,10 +11,14 @@ from unittest.mock import Mock, patch
 import pytest
 
 from houou_logs.cli import (
+    INTERRUPTED_EXIT_CODE,
+    IO_ERROR_EXIT_CODE,
+    USER_INPUT_ERROR_EXIT_CODE,
     download_cli,
     export_cli,
     fetch_cli,
     import_cli,
+    main,
     set_download_args,
     set_export_args,
     set_fetch_args,
@@ -24,6 +28,7 @@ from houou_logs.cli import (
     validate_cli,
     yakuman_cli,
 )
+from houou_logs.exceptions import UserInputError
 
 
 def test_set_import_args_parses_correctly() -> None:
@@ -216,3 +221,55 @@ def test_export_cli_calls_export(mock_export: Mock) -> None:
         10,
         5,
     )
+
+
+@patch("houou_logs.fetch.fetch")
+def test_main_exits_with_user_input_error_code(
+    mock_fetch: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    mock_fetch.side_effect = UserInputError("invalid option")
+    monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
+
+    with pytest.raises(SystemExit) as e:
+        main()
+
+    assert e.value.code == USER_INPUT_ERROR_EXIT_CODE
+    assert capsys.readouterr().err == "Error: invalid option\n"
+
+
+@patch("houou_logs.fetch.fetch")
+def test_main_exits_with_io_error_code_without_traceback(
+    mock_fetch: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    mock_fetch.side_effect = OSError("network is unreachable")
+    monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
+
+    with pytest.raises(SystemExit) as e:
+        main()
+
+    assert e.value.code == IO_ERROR_EXIT_CODE
+    captured = capsys.readouterr()
+    assert captured.err == "I/O error: network is unreachable\n"
+    assert "Traceback" not in captured.err
+
+
+@patch("houou_logs.fetch.fetch")
+def test_main_exits_with_interrupted_code_without_traceback(
+    mock_fetch: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    mock_fetch.side_effect = KeyboardInterrupt
+    monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
+
+    with pytest.raises(SystemExit) as e:
+        main()
+
+    assert e.value.code == INTERRUPTED_EXIT_CODE
+    captured = capsys.readouterr()
+    assert captured.err == "Interrupted by user.\n"
+    assert "Traceback" not in captured.err

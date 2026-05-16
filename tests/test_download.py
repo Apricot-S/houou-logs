@@ -3,11 +3,16 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pytest
+from niquests import Session
 
 from houou_logs.download import (
     build_url,
+    compress_log_content,
+    fetch_log_content_for_download,
+    iter_undownloaded_log_id_batches,
     validate_db_path,
     validate_length,
     validate_limit,
@@ -66,3 +71,79 @@ def test_build_url() -> None:
         build_url("2024060600gm-00b9-0000-88e70833")
         == "https://tenhou.net/0/log/?2024060600gm-00b9-0000-88e70833"
     )
+
+
+def test_iter_undownloaded_log_id_batches_respects_limit() -> None:
+    mock_cursor = Mock()
+    mock_cursor.fetchall.side_effect = [
+        [("2009010100gm-00a9-0000-00000000",)],
+        [("2009010101gm-00a9-0000-00000000",)],
+    ]
+
+    actual = list(
+        iter_undownloaded_log_id_batches(
+            mock_cursor,
+            None,
+            None,
+            2,
+            1,
+        ),
+    )
+
+    expected = [
+        ["2009010100gm-00a9-0000-00000000"],
+        ["2009010101gm-00a9-0000-00000000"],
+    ]
+    assert actual == expected
+    assert mock_cursor.execute.call_count == 2
+
+
+def test_fetch_log_content_for_download_success() -> None:
+    mock_session = Mock(spec_set=Session)
+    content = b"<mjloggm></mjloggm>"
+
+    with patch("houou_logs.download.fetch_log_content", return_value=content):
+        was_error, actual = fetch_log_content_for_download(
+            mock_session,
+            "2024060600gm-00b9-0000-88e70833",
+        )
+
+    assert not was_error
+    assert actual == content
+
+
+def test_fetch_log_content_for_download_fetch_error() -> None:
+    mock_session = Mock(spec_set=Session)
+
+    with patch(
+        "houou_logs.download.fetch_log_content",
+        side_effect=RuntimeError("failed"),
+    ):
+        was_error, actual = fetch_log_content_for_download(
+            mock_session,
+            "2024060600gm-00b9-0000-88e70833",
+        )
+
+    assert was_error
+    assert actual == b""
+
+
+def test_compress_log_content_success() -> None:
+    was_error, compressed_content = compress_log_content(
+        "2024060600gm-00b9-0000-88e70833",
+        b"<mjloggm></mjloggm>",
+    )
+
+    assert not was_error
+    assert compressed_content is not None
+
+
+def test_compress_log_content_compress_error() -> None:
+    with patch("houou_logs.download.gzip.compress", side_effect=OSError):
+        was_error, compressed_content = compress_log_content(
+            "2024060600gm-00b9-0000-88e70833",
+            b"log",
+        )
+
+    assert was_error
+    assert compressed_content is None
