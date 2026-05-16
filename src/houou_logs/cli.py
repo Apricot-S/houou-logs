@@ -19,6 +19,7 @@ from houou_logs.exceptions import UserInputError
 
 IO_ERROR_EXIT_CODE = 1
 USER_INPUT_ERROR_EXIT_CODE = 2
+INTERRUPTED_EXIT_CODE = 130
 EXTERNAL_IO_ERRORS = (
     OSError,
     sqlite3.Error,
@@ -266,6 +267,9 @@ def main() -> None:
 
     try:
         args.func(args)
+    except KeyboardInterrupt:
+        print("Interrupted by user.", file=sys.stderr)
+        sys.exit(INTERRUPTED_EXIT_CODE)
     except UserInputError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(USER_INPUT_ERROR_EXIT_CODE)
