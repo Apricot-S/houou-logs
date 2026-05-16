@@ -439,15 +439,6 @@ def get_fetch_attempt_time(cursor: sqlite3.Cursor, kind: str) -> datetime:
     return datetime.fromtimestamp(timestamp, UTC)
 
 
-def get_file_index(cursor: sqlite3.Cursor) -> dict[str, int]:
-    cursor.execute(
-        """
-        SELECT file, size FROM file_index;
-        """,
-    )
-    return dict(cursor.fetchall())
-
-
 def list_changed_file_index(
     cursor: sqlite3.Cursor,
     file_index: dict[str, int],

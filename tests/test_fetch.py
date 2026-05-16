@@ -13,7 +13,6 @@ from niquests.exceptions import HTTPError
 from houou_logs import db
 from houou_logs import fetch as fetch_module
 from houou_logs.fetch import (
-    exclude_unchanged_files,
     fetch_file_index_text,
     fetch_log_file_content,
     filter_houou_files,
@@ -227,13 +226,6 @@ def test_filter_houou_files_contains_old_houou_file() -> None:
 def test_filter_houou_files_ignores_prefix_in_directory_name() -> None:
     file_index = {"scc_archive/sca20250101.log.gz": 75399}
     assert filter_houou_files(file_index) == {}
-
-
-def test_exclude_unchanged_files_excludes_unchanged_file() -> None:
-    file_index = {"sca20250101.log.gz": 75399, "scc20250101.html.gz": 40759}
-    db_records = {"sca20250101.log.gz": 75399, "scc20250101.html.gz": 40758}
-    ret = exclude_unchanged_files(file_index, db_records)
-    assert ret == {"scc20250101.html.gz": 40759}
 
 
 def test_fetch_archive_uses_archive_attempt_time(

@@ -658,19 +658,6 @@ def test_get_fetch_attempt_time_2_times_updated() -> None:
         conn.close()
 
 
-def test_get_file_index_empty() -> None:
-    conn = db.open_db(":memory:")
-
-    try:
-        db.setup_table(conn)
-        cursor = conn.cursor()
-
-        file_index = db.get_file_index(cursor)
-        assert file_index == {}
-    finally:
-        conn.close()
-
-
 def test_list_changed_file_index_empty_input() -> None:
     conn = db.open_db(":memory:")
 
@@ -744,7 +731,8 @@ def test_insert_file_index_new() -> None:
         size = 30045
         db.insert_file_index(cursor, file, size)
 
-        file_index = db.get_file_index(cursor)
+        cursor.execute("SELECT file, size FROM file_index;")
+        file_index = dict(cursor.fetchall())
         assert file_index[file] == size
     finally:
         conn.close()
@@ -763,7 +751,8 @@ def test_insert_file_index_update() -> None:
         db.insert_file_index(cursor, file, size1)
         db.insert_file_index(cursor, file, size2)
 
-        file_index = db.get_file_index(cursor)
+        cursor.execute("SELECT file, size FROM file_index;")
+        file_index = dict(cursor.fetchall())
         assert file_index[file] == size2
     finally:
         conn.close()
@@ -783,7 +772,8 @@ def test_insert_file_index_multiple() -> None:
         size2 = 32538
         db.insert_file_index(cursor, file2, size2)
 
-        file_index = db.get_file_index(cursor)
+        cursor.execute("SELECT file, size FROM file_index;")
+        file_index = dict(cursor.fetchall())
         assert file_index[file1] == size1
         assert file_index[file2] == size2
     finally:

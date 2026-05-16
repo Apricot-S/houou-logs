@@ -86,17 +86,6 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
     }
 
 
-def exclude_unchanged_files(
-    file_index: dict[str, int],
-    db_records: dict[str, int],
-) -> dict[str, int]:
-    return {
-        name: size
-        for name, size in file_index.items()
-        if db_records.get(name) != size
-    }
-
-
 def fetch(db_path: str | Path, *, archive: bool) -> int:
     num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:
