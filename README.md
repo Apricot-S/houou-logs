@@ -182,7 +182,7 @@ Options:
 - `-l`, `--length <LENGTH>`  
   Game length: `t` for tonpu (East Only), `h` for hanchan (Two-Wind Match). If omitted, both are included.
 - `--limit <LIMIT>`  
-  Max number of logs to download. If omitted, all available logs are downloaded.
+  Max number of logs to export. If omitted, all available logs are exported.
 - `--offset <OFFSET>`  
   Number of logs to skip before starting export. Default is `0`. Ignored if `--limit` is not specified.
 
