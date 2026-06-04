@@ -42,7 +42,10 @@ houou-logs$ uv tool install .
 Import a list of log IDs into the database.
 
 > [!NOTE]
-> Houou (Phoenix) games are available starting from 2009.
+>
+> - Houou (Phoenix) games are available starting from 2009.
+> - Fetching yearly archive files from `https://tenhou.net/sc/raw/scrawYYYY.zip` currently returns 404.
+>   The `import` command is still available for archive files that have already been obtained.
 
 ```sh
 houou-logs import <db-path> <archive-path>
@@ -148,6 +151,10 @@ houou-logs download db/2024.db --players 3 --length h --limit 50
 
 Validate that all downloaded mjlog XML in the database can be parsed correctly.
 
+> [!NOTE]
+> Some logs are malformed XML at the source.
+> For example, [#43](https://github.com/Apricot-S/houou-logs/issues/43) reports logs where a `RYUUKYOKU` element contains duplicated `owari` attributes.
+
 If an invalid or unreadable log is found, this command resets that log entry to the undownloaded state.
 This allows a later `download` run to fetch it again.
 
@@ -182,7 +189,7 @@ Options:
 - `-l`, `--length <LENGTH>`  
   Game length: `t` for tonpu (East Only), `h` for hanchan (Two-Wind Match). If omitted, both are included.
 - `--limit <LIMIT>`  
-  Max number of logs to download. If omitted, all available logs are downloaded.
+  Max number of logs to export. If omitted, all available logs are exported.
 - `--offset <OFFSET>`  
   Number of logs to skip before starting export. Default is `0`. Ignored if `--limit` is not specified.
 
