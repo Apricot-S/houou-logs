@@ -15,6 +15,4 @@ TIMEOUT = (
 
 
 def create_session() -> niquests.Session:
-    session = niquests.Session()
-    session.headers.update(HEADERS)
-    return session
+    return niquests.Session(headers=HEADERS)
