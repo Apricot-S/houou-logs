@@ -45,7 +45,7 @@ lint = [
     "ruff>=0.15.12,<0.16",
 ]
 test = [
-    "pytest>=9.0.3,<10",
+    "pytest>=9.1.1,<10",
     "tzdata>=2025.2",
 ]
 typing = [
