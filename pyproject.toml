@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
     "niquests>=3.21.0,<4",
-    "tqdm>=4.67.3,<5",
+    "tqdm>=4.70.0,<5",
 ]
 
 [project.scripts]
@@ -50,7 +50,7 @@ test = [
 ]
 typing = [
     "ty>=0.0.34",
-    "types-tqdm>=4.67.3.20260508",
+    "types-tqdm>=4.70.0.20260805",
 ]
 
 [tool.ruff]
