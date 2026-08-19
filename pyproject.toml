@@ -1,6 +1,6 @@
 [project]
 name = "houou-logs"
-version = "2.0.1"
+version = "2.1.0"
 description = "Tools to download Houou (Phoenix) logs from tenhou.net"
 authors = [
     { name = "Apricot S." }
@@ -21,8 +21,8 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "niquests>=3.17.0,<4",
-    "tqdm>=4.67.3,<5",
+    "niquests>=3.21.0,<4",
+    "tqdm>=4.70.0,<5",
 ]
 
 [project.scripts]
@@ -32,7 +32,7 @@ houou-logs = "houou_logs.cli:main"
 Repository = "https://github.com/Apricot-S/houou-logs.git"
 
 [build-system]
-requires = ["uv_build>=0.8.17,<0.12.0"]
+requires = ["uv_build>=0.8.17,<0.13.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
@@ -42,15 +42,15 @@ dev = [
     { include-group = "typing" },
 ]
 lint = [
-    "ruff>=0.15.12,<0.16",
+    "ruff>=0.16.3,<0.17",
 ]
 test = [
-    "pytest>=9.0.3,<10",
-    "tzdata>=2025.2",
+    "pytest>=9.1.1,<10",
+    "tzdata>=2026.3",
 ]
 typing = [
-    "ty>=0.0.34",
-    "types-tqdm>=4.67.3.20260508",
+    "ty>=0.0.73",
+    "types-tqdm>=4.70.0.20260805",
 ]
 
 [tool.ruff]
@@ -72,6 +72,8 @@ ignore = [
     "PLR0912", # too-many-branches
     "PLR0913", # too-many-arguments
     "PLR0915", # too-many-statements
+    "PLR0917", # too-many-positional-arguments
+    "CPY001",  # missing-copyright-notice
 
     "T201",    # print
 ]
