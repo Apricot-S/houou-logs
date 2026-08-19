@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 from time import monotonic, sleep
+from typing import override
 
 import niquests
 
@@ -23,6 +24,7 @@ class TenhouSession(niquests.Session):
         super().__init__(headers=HEADERS)
         self._last_request_started_at: float | None = None
 
+    @override
     def request(
         self,
         method: str,
