@@ -21,7 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "niquests>=3.17.0,<4",
+    "niquests>=3.21.0,<4",
     "tqdm>=4.67.3,<5",
 ]
 
