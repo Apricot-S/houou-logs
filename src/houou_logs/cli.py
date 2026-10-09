@@ -231,7 +231,7 @@ def format_external_io_error(error: Exception) -> str:
     return f"I/O error: {message}"
 
 
-def main() -> None:
+def build_parser() -> ArgumentParser:
     parser = ArgumentParser()
     subparsers = parser.add_subparsers()
 
@@ -259,6 +259,11 @@ def main() -> None:
     parser_export = set_export_args(parser_export)
     parser_export.set_defaults(func=export_cli)
 
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     if not hasattr(args, "func"):
