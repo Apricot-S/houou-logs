@@ -17,6 +17,7 @@ from niquests.exceptions import RequestException
 from houou_logs import download, export, fetch, import_, validate, yakuman
 from houou_logs.exceptions import UserInputError
 
+SUCCESS_EXIT_CODE = 0
 IO_ERROR_EXIT_CODE = 1
 USER_INPUT_ERROR_EXIT_CODE = 2
 INTERRUPTED_EXIT_CODE = 130
@@ -231,9 +232,9 @@ def format_external_io_error(error: Exception) -> str:
     return f"I/O error: {message}"
 
 
-def main() -> None:
+def build_parser() -> ArgumentParser:
     parser = ArgumentParser()
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(required=True)
 
     parser_import = subparsers.add_parser("import")
     parser_import = set_import_args(parser_import)
@@ -259,24 +260,27 @@ def main() -> None:
     parser_export = set_export_args(parser_export)
     parser_export.set_defaults(func=export_cli)
 
-    args = parser.parse_args()
+    return parser
 
-    if not hasattr(args, "func"):
-        parser.print_help()
-        return
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
 
     try:
         args.func(args)
     except KeyboardInterrupt:
         print("Interrupted by user.", file=sys.stderr)
-        sys.exit(INTERRUPTED_EXIT_CODE)
+        return INTERRUPTED_EXIT_CODE
     except UserInputError as e:
         print(f"Error: {e}", file=sys.stderr)
-        sys.exit(USER_INPUT_ERROR_EXIT_CODE)
+        return USER_INPUT_ERROR_EXIT_CODE
     except EXTERNAL_IO_ERRORS as e:
         print(format_external_io_error(e), file=sys.stderr)
-        sys.exit(IO_ERROR_EXIT_CODE)
+        return IO_ERROR_EXIT_CODE
+    else:
+        return SUCCESS_EXIT_CODE
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
