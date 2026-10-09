@@ -234,7 +234,7 @@ def format_external_io_error(error: Exception) -> str:
 
 def build_parser() -> ArgumentParser:
     parser = ArgumentParser()
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(required=True)
 
     parser_import = subparsers.add_parser("import")
     parser_import = set_import_args(parser_import)
@@ -266,10 +266,6 @@ def build_parser() -> ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-
-    if not hasattr(args, "func"):
-        parser.print_help()
-        return SUCCESS_EXIT_CODE
 
     try:
         args.func(args)

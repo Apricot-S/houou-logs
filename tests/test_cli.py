@@ -223,6 +223,22 @@ def test_export_cli_calls_export(mock_export: Mock) -> None:
     )
 
 
+def test_main_requires_subcommand(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    monkeypatch.setattr("sys.argv", ["houou-logs"])
+
+    with pytest.raises(SystemExit) as e:
+        main()
+
+    assert e.value.code == USER_INPUT_ERROR_EXIT_CODE
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "usage:" in captured.err
+    assert "required" in captured.err
+
+
 @patch("houou_logs.fetch.fetch")
 def test_main_returns_user_input_error_code(
     mock_fetch: Mock,
