@@ -224,7 +224,7 @@ def test_export_cli_calls_export(mock_export: Mock) -> None:
 
 
 @patch("houou_logs.fetch.fetch")
-def test_main_exits_with_user_input_error_code(
+def test_main_returns_user_input_error_code(
     mock_fetch: Mock,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
@@ -232,15 +232,12 @@ def test_main_exits_with_user_input_error_code(
     mock_fetch.side_effect = UserInputError("invalid option")
     monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
 
-    with pytest.raises(SystemExit) as e:
-        main()
-
-    assert e.value.code == USER_INPUT_ERROR_EXIT_CODE
+    assert main() == USER_INPUT_ERROR_EXIT_CODE
     assert capsys.readouterr().err == "Error: invalid option\n"
 
 
 @patch("houou_logs.fetch.fetch")
-def test_main_exits_with_io_error_code_without_traceback(
+def test_main_returns_io_error_code_without_traceback(
     mock_fetch: Mock,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
@@ -248,17 +245,14 @@ def test_main_exits_with_io_error_code_without_traceback(
     mock_fetch.side_effect = OSError("network is unreachable")
     monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
 
-    with pytest.raises(SystemExit) as e:
-        main()
-
-    assert e.value.code == IO_ERROR_EXIT_CODE
+    assert main() == IO_ERROR_EXIT_CODE
     captured = capsys.readouterr()
     assert captured.err == "I/O error: network is unreachable\n"
     assert "Traceback" not in captured.err
 
 
 @patch("houou_logs.fetch.fetch")
-def test_main_exits_with_interrupted_code_without_traceback(
+def test_main_returns_interrupted_code_without_traceback(
     mock_fetch: Mock,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
@@ -266,10 +260,7 @@ def test_main_exits_with_interrupted_code_without_traceback(
     mock_fetch.side_effect = KeyboardInterrupt
     monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
 
-    with pytest.raises(SystemExit) as e:
-        main()
-
-    assert e.value.code == INTERRUPTED_EXIT_CODE
+    assert main() == INTERRUPTED_EXIT_CODE
     captured = capsys.readouterr()
     assert captured.err == "Interrupted by user.\n"
     assert "Traceback" not in captured.err
