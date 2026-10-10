@@ -17,6 +17,36 @@ from houou_logs.yakuman import (
 )
 
 
+@pytest.mark.parametrize("year", [-1, 0, 10000, 10001])
+def test_validate_yakuman_log_date_year_out_of_range(year: int) -> None:
+    fixed_now = datetime(2025, 9, 15, tzinfo=UTC)
+    with pytest.raises(
+        UserInputError,
+        match="year must be between 1 and 9999",
+    ):
+        validate_yakuman_log_date(year, 1, fixed_now)
+
+
+def test_validate_yakuman_log_date_min_year_before_available_from() -> None:
+    fixed_now = datetime(2025, 9, 15, tzinfo=UTC)
+    with pytest.raises(
+        UserInputError,
+        match="available starting from 2006/10",
+    ):
+        validate_yakuman_log_date(1, 1, fixed_now)
+
+
+def test_validate_yakuman_log_date_max_year_is_future() -> None:
+    fixed_now = datetime(2025, 9, 15, tzinfo=UTC)
+    with pytest.raises(UserInputError, match="future dates are not allowed"):
+        validate_yakuman_log_date(9999, 1, fixed_now)
+
+
+def test_validate_yakuman_log_date_max_year_is_valid() -> None:
+    fixed_now = datetime(9999, 12, 31, tzinfo=UTC)
+    validate_yakuman_log_date(9999, 12, fixed_now)
+
+
 def test_validate_yakuman_log_date_month_0_is_invalid() -> None:
     fixed_now = datetime(2025, 9, 15, tzinfo=UTC)
     with pytest.raises(UserInputError):
