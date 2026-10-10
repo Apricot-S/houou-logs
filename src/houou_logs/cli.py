@@ -233,30 +233,56 @@ def format_external_io_error(error: Exception) -> str:
 
 
 def build_parser() -> ArgumentParser:
-    parser = ArgumentParser()
+    parser = ArgumentParser(
+        description="Tools to download Houou (Phoenix) logs from tenhou.net",
+    )
     subparsers = parser.add_subparsers(required=True)
 
-    parser_import = subparsers.add_parser("import")
+    parser_import = subparsers.add_parser(
+        "import",
+        description="Import log IDs from a yearly archive file",
+        help="Import log IDs from a yearly archive file",
+    )
     parser_import = set_import_args(parser_import)
     parser_import.set_defaults(func=import_cli)
 
-    parser_fetch = subparsers.add_parser("fetch")
+    parser_fetch = subparsers.add_parser(
+        "fetch",
+        description="Fetch latest log IDs into the database",
+        help="Fetch latest log IDs into the database",
+    )
     parser_fetch = set_fetch_args(parser_fetch)
     parser_fetch.set_defaults(func=fetch_cli)
 
-    parser_yakuman = subparsers.add_parser("yakuman")
+    parser_yakuman = subparsers.add_parser(
+        "yakuman",
+        description="Fetch yakuman log IDs for a specific year and month",
+        help="Fetch yakuman log IDs for a specific year and month",
+    )
     parser_yakuman = set_yakuman_args(parser_yakuman)
     parser_yakuman.set_defaults(func=yakuman_cli)
 
-    parser_download = subparsers.add_parser("download")
+    parser_download = subparsers.add_parser(
+        "download",
+        description="Download log contents into the database",
+        help="Download log contents into the database",
+    )
     parser_download = set_download_args(parser_download)
     parser_download.set_defaults(func=download_cli)
 
-    parser_validate = subparsers.add_parser("validate")
+    parser_validate = subparsers.add_parser(
+        "validate",
+        description="Validate that downloaded logs can be parsed",
+        help="Validate that downloaded logs can be parsed",
+    )
     parser_validate = set_validate_args(parser_validate)
     parser_validate.set_defaults(func=validate_cli)
 
-    parser_export = subparsers.add_parser("export")
+    parser_export = subparsers.add_parser(
+        "export",
+        description="Export downloaded log contents as XML files",
+        help="Export downloaded log contents as XML files",
+    )
     parser_export = set_export_args(parser_export)
     parser_export.set_defaults(func=export_cli)
 
