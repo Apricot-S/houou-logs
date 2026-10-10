@@ -5,7 +5,7 @@
 import ast
 import re
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import MAXYEAR, MINYEAR, UTC, datetime
 from pathlib import Path
 
 from niquests import Session
@@ -28,6 +28,10 @@ YAKUMAN_LOG_ID_PATTERN = re.compile(
 def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
     if not (1 <= month <= 12):  # noqa: PLR2004
         msg = "month must be between 1 and 12"
+        raise UserInputError(msg)
+
+    if not (MINYEAR <= year <= MAXYEAR):
+        msg = f"year must be between {MINYEAR} and {MAXYEAR}"
         raise UserInputError(msg)
 
     target_date = datetime(year, month, 1, tzinfo=UTC)

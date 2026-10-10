@@ -239,6 +239,33 @@ def test_main_requires_subcommand(
     assert "required" in captured.err
 
 
+@pytest.mark.parametrize("year", [-1, 0, 10000, 10001])
+@patch("houou_logs.yakuman.create_session")
+@patch("houou_logs.yakuman.db.open_db")
+def test_main_rejects_invalid_yakuman_year_without_side_effects(
+    mock_open_db: Mock,
+    mock_create_session: Mock,
+    year: int,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "db.sqlite"
+    monkeypatch.setattr(
+        "sys.argv",
+        ["houou-logs", "yakuman", str(db_path), str(year), "1"],
+    )
+
+    assert main() == USER_INPUT_ERROR_EXIT_CODE
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "Error: year must be between 1 and 9999\n"
+    mock_open_db.assert_not_called()
+    mock_create_session.assert_not_called()
+    assert not db_path.exists()
+
+
 @patch("houou_logs.fetch.fetch")
 def test_main_returns_user_input_error_code(
     mock_fetch: Mock,
