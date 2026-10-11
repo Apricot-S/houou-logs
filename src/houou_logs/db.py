@@ -212,11 +212,20 @@ def count_undownloaded_log_ids(
         WHERE {" AND ".join(conditions)}
         """  # noqa: S608
 
-    cursor.execute(sql, params)
-    count = cursor.fetchone()[0]
     if limit is not None:
-        return min(count, limit)
-    return count
+        sql = f"""
+            SELECT COUNT(*)
+            FROM (
+                SELECT 1
+                FROM logs
+                WHERE {" AND ".join(conditions)}
+                LIMIT ?
+            )
+            """  # noqa: S608
+        params.append(limit)
+
+    cursor.execute(sql, params)
+    return cursor.fetchone()[0]
 
 
 def update_log_entries(
@@ -364,14 +373,21 @@ def count_log_contents(
         WHERE {" AND ".join(conditions)}
         """  # noqa: S608
 
-    cursor.execute(sql, params)
-    count = cursor.fetchone()[0]
-
     if limit is not None:
-        count = max(count - offset, 0)
-        return min(count, limit)
+        # Ordering does not affect the page's row count.
+        sql = f"""
+            SELECT COUNT(*)
+            FROM (
+                SELECT 1
+                FROM logs
+                WHERE {" AND ".join(conditions)}
+                LIMIT ? OFFSET ?
+            )
+            """  # noqa: S608
+        params.extend([limit, offset])
 
-    return count
+    cursor.execute(sql, params)
+    return cursor.fetchone()[0]
 
 
 def count_all_ids(cursor: sqlite3.Cursor) -> int:
