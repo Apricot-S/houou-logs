@@ -10,8 +10,6 @@ import pytest
 
 from houou_logs.db import LogEntry
 from houou_logs.log_id import (
-    extract_ids,
-    extract_log_entries,
     iter_log_entries,
     parse_date,
     parse_id,
@@ -24,23 +22,6 @@ MOCK_LOG = """
 23:02 | 35 | 四鳳南喰赤 | <a href="http://tenhou.net/0/?log=2009020123gm-00a9-0000-00000001">牌譜</a> | EXAMPLE(+38) EXAMPLE2(+4) EXAMPLE4(-16) EXAMPLE3(-26)<br>
 
 """  # noqa: E501
-
-
-def test_extract_ids_empty_text() -> None:
-    assert extract_ids("") == []
-
-
-def test_extract_ids_no_match() -> None:
-    log = "L1000 | 21:37 | 四般南－－ | NoName(+48) NoName(+13) NoName(-25) NoName(-36)"  # noqa: E501, RUF001
-    assert extract_ids(log) == []
-
-
-def test_extract_ids_multiple_matches() -> None:
-    ids = [
-        ("00:00", "2009020100gm-00a9-0000-00000000"),
-        ("23:02", "2009020123gm-00a9-0000-00000001"),
-    ]
-    assert extract_ids(MOCK_LOG) == ids
 
 
 def test_parse_date() -> None:
@@ -72,35 +53,35 @@ def test_parse_id_rejects_invalid_log_id() -> None:
         parse_id("00:00", invalid_log_id)
 
 
-def test_extract_log_entries_skips_extension_log(tmp_path: Path) -> None:
+def test_iter_log_entries_skips_extension_log(tmp_path: Path) -> None:
     filename = "not_html.log"
     fake_file = tmp_path / filename
     fake_file.write_bytes(b"not a html")
 
     with fake_file.open(mode="br") as f:
-        entries = extract_log_entries(filename, f)
+        entries = list(iter_log_entries(filename, f))
 
     assert entries == []
 
 
-def test_extract_log_entries_skips_extension_log_gz(tmp_path: Path) -> None:
+def test_iter_log_entries_skips_extension_log_gz(tmp_path: Path) -> None:
     filename = "not_html.log.gz"
     fake_file = tmp_path / filename
     fake_file.write_bytes(b"not a html")
 
     with fake_file.open(mode="br") as f:
-        entries = extract_log_entries(filename, f)
+        entries = list(iter_log_entries(filename, f))
 
     assert entries == []
 
 
-def test_extract_log_entries_parse_extension_html(tmp_path: Path) -> None:
+def test_iter_log_entries_parse_extension_html(tmp_path: Path) -> None:
     filename = "valid_log.html"
     fake_file = tmp_path / filename
     fake_file.write_text(MOCK_LOG, encoding="utf-8")
 
     with fake_file.open(mode="br") as f:
-        entries = extract_log_entries(filename, f)
+        entries = list(iter_log_entries(filename, f))
 
     expected = [
         LogEntry(
@@ -125,7 +106,7 @@ def test_extract_log_entries_parse_extension_html(tmp_path: Path) -> None:
     assert entries == expected
 
 
-def test_extract_log_entries_skips_invalid_log_id(tmp_path: Path) -> None:
+def test_iter_log_entries_skips_invalid_log_id(tmp_path: Path) -> None:
     filename = "valid_log.html"
     fake_file = tmp_path / filename
     log = """
@@ -135,7 +116,7 @@ def test_extract_log_entries_skips_invalid_log_id(tmp_path: Path) -> None:
     fake_file.write_text(log, encoding="utf-8")
 
     with fake_file.open(mode="br") as f:
-        entries = extract_log_entries(filename, f)
+        entries = list(iter_log_entries(filename, f))
 
     assert entries == [
         LogEntry(
