@@ -89,6 +89,27 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
     return rounds
 
 
+def validate_log_structure(log_content: str) -> bool:
+    # Parse the entire document before checking the game-end marker.
+    root = ET.fromstring(log_content)  # noqa: S314
+    if root.tag != "mjloggm":
+        msg = "invalid root tag, expected <mjloggm>"
+        raise InvalidLogContentError(msg)
+
+    game_ended = False
+    for elem in root:
+        if game_ended and elem.tag not in ("UN", "BYE"):
+            msg = f"unexpected element <{elem.tag}> after game end"
+            raise InvalidLogContentError(msg)
+        if elem.tag in ("AGARI", "RYUUKYOKU") and "owari" in elem.attrib:
+            game_ended = True
+
+    if not game_ended:
+        msg = "log ended without 'owari' attribute"
+        raise InvalidLogContentError(msg)
+    return True
+
+
 def is_valid_log_content(
     log_id: str,
     compressed_content: bytes | None,
@@ -96,8 +117,7 @@ def is_valid_log_content(
     content = None
     try:
         if compressed_content is not None:
-            decompressed = gzip.decompress(compressed_content)
-            content = decompressed.decode("utf-8")
+            content = gzip.decompress(compressed_content).decode("utf-8")
     except (gzip.BadGzipFile, EOFError, zlib.error, UnicodeDecodeError) as e:
         tqdm.write(f"{log_id}: failed to decompress: {e}")
         return False
@@ -106,12 +126,10 @@ def is_valid_log_content(
         return False
 
     try:
-        parsed_rounds = split_log_to_game_rounds(content)
+        return validate_log_structure(content)
     except (ET.ParseError, InvalidLogContentError) as e:
         tqdm.write(f"{log_id}: failed to parse: {e}")
         return False
-
-    return bool(parsed_rounds)
 
 
 def validate(db_path: Path) -> tuple[bool, int, int]:
