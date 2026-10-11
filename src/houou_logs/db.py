@@ -4,7 +4,7 @@
 
 import sqlite3
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -303,7 +303,7 @@ def iter_log_contents(
     length: str | None,
     limit: int | None,
     offset: int,
-) -> Iterator[tuple[str, bytes]]:
+) -> Generator[tuple[str, bytes]]:
     conditions = ["is_processed = 1", "was_error = 0"]
     params: list = []
 

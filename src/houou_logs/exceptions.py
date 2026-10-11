@@ -5,3 +5,11 @@
 
 class UserInputError(Exception):
     """Raised when arguments are invalid or out of allowed range."""
+
+
+class LogFetchError(RuntimeError):
+    """The server response does not contain a downloadable log."""
+
+
+class InvalidLogContentError(ValueError):
+    """The XML log does not satisfy the expected log structure."""
