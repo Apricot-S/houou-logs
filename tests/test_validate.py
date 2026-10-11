@@ -31,7 +31,7 @@ def test_expected_invalid_content_is_rejected(content: bytes) -> None:
 @pytest.mark.parametrize("error_type", [RuntimeError, ValueError, MemoryError])
 @pytest.mark.parametrize(
     "stage",
-    ["gzip.decompress", "split_log_to_game_rounds"],
+    ["gzip.decompress", "validate_log_structure"],
 )
 def test_validate_unexpected_error_preserves_saved_content(
     db_path: Path,
@@ -58,6 +58,68 @@ def test_validate_unexpected_error_preserves_saved_content(
 
 def compress_log(content: str) -> bytes:
     return gzip.compress(content.encode("utf-8"), mtime=0)
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ('<mjloggm><AGARI owari="" /></mjloggm>', True),
+        ('<mjloggm><RYUUKYOKU owari="0" /><UN /><BYE /></mjloggm>', True),
+        (
+            (
+                "<mjloggm><GO /><SHUFFLE /><TAIKYOKU /><UN />"
+                '<INIT shuffle="legacy" /><T1 /><AGARI /><INIT />'
+                '<RYUUKYOKU owari="0" /><UN /><BYE /></mjloggm>'
+            ),
+            True,
+        ),
+        ('<mjloggm><INIT /><unknown /><AGARI owari="0" /></mjloggm>', True),
+        ('<other><AGARI owari="0" /></other>', False),
+        ('<mjloggm xmlns="urn:test"><AGARI owari="0" /></mjloggm>', False),
+        ('<mjloggm><AGARI owari="0" /><INIT /></mjloggm>', False),
+        ('<mjloggm><AGARI owari="0" /><GO /></mjloggm>', False),
+        ('<mjloggm><AGARI owari="0" /><AGARI owari="0" /></mjloggm>', False),
+        ('<mjloggm><INIT owari="0" /></mjloggm>', False),
+        ('<mjloggm><UN><AGARI owari="0" /></UN></mjloggm>', False),
+        ("<mjloggm><AGARI /></mjloggm>", False),
+        ('<mjloggm><AGARI owari="0" />', False),
+        ('<mjloggm><AGARI owari="0" /><UN></mjloggm>', False),
+        ('<mjloggm><AGARI owari="0" /></mjloggm>trailing', False),
+        ('<mjloggm><AGARI owari="0" /></mjloggm><other />', False),
+        ("<mjloggm />", False),
+        ("", False),
+    ],
+)
+def test_validation_checks_log_structure(
+    content: str,
+    *,
+    expected: bool,
+) -> None:
+    assert (
+        validate_module.is_valid_log_content(
+            "log-id",
+            compress_log(content),
+        )
+        == expected
+    )
+
+
+def test_validation_does_not_serialize_elements() -> None:
+    with patch("houou_logs.validate.ET.tostring") as serialize:
+        assert validate_module.is_valid_log_content("log-id", valid_log())
+    serialize.assert_not_called()
+
+
+def test_validation_rejects_invalid_utf8_after_game_end() -> None:
+    content = gzip.compress(b'<mjloggm><AGARI owari="0" /></mjloggm>\xff')
+    assert not validate_module.is_valid_log_content("log-id", content)
+
+
+@pytest.mark.parametrize("content", [None, b"", gzip.compress(b"")])
+def test_validation_rejects_missing_or_empty_content(
+    content: bytes | None,
+) -> None:
+    assert not validate_module.is_valid_log_content("log-id", content)
 
 
 def valid_log() -> bytes:
