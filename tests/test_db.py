@@ -273,7 +273,7 @@ def test_insert_log_entries() -> None:
             ),
         ]
 
-        db.insert_log_entries(cursor, entries)
+        assert db.insert_log_entries(cursor, entries) == 2
         conn.commit()
 
         cursor.execute("SELECT * FROM logs;")
@@ -312,7 +312,7 @@ def test_insert_log_entries_keeps_existing_row_on_conflict() -> None:
             was_error=True,
             log=None,
         )
-        db.insert_log_entries(cursor, [refreshed_entry])
+        assert db.insert_log_entries(cursor, [refreshed_entry]) == 0
         conn.commit()
 
         cursor.execute("SELECT * FROM logs WHERE id = ?;", (log_id,))

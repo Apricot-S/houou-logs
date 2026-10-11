@@ -172,7 +172,6 @@ def yakuman(db_path: Path, year: int, month: int, now: datetime) -> int:
             ids = extract_ids(resp)
             entries = parse_entries(year, ids)
 
-            db.insert_log_entries(cursor, entries)
-            num_logs = len(entries)
+            num_logs = db.insert_log_entries(cursor, entries)
 
     return num_logs
