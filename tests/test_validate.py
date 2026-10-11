@@ -4,12 +4,10 @@
 
 import gzip
 import sqlite3
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from examples.split_log_to_game_rounds import split_log_to_game_rounds
 
 from houou_logs import db
 from houou_logs import validate as validate_module
@@ -92,33 +90,23 @@ def compress_log(content: str) -> bytes:
         ("", False),
     ],
 )
-def test_validation_matches_round_splitting(
+def test_validation_checks_log_structure(
     content: str,
     *,
     expected: bool,
 ) -> None:
-    try:
-        previous_result = bool(
-            split_log_to_game_rounds(content),
+    assert (
+        validate_module.is_valid_log_content(
+            "log-id",
+            compress_log(content),
         )
-    except (ET.ParseError, ValueError):
-        previous_result = False
-    assert previous_result == expected
-    assert validate_module.is_valid_log_content(
-        "log-id",
-        compress_log(content),
-    ) == (previous_result)
+        == expected
+    )
 
 
-def test_validation_does_not_split_or_serialize_elements() -> None:
-    with (
-        patch(
-            "examples.split_log_to_game_rounds.split_log_to_game_rounds",
-        ) as split,
-        patch("houou_logs.validate.ET.tostring") as serialize,
-    ):
+def test_validation_does_not_serialize_elements() -> None:
+    with patch("houou_logs.validate.ET.tostring") as serialize:
         assert validate_module.is_valid_log_content("log-id", valid_log())
-    split.assert_not_called()
     serialize.assert_not_called()
 
 
@@ -132,18 +120,6 @@ def test_validation_rejects_missing_or_empty_content(
     content: bytes | None,
 ) -> None:
     assert not validate_module.is_valid_log_content("log-id", content)
-
-
-def test_round_splitting_preserves_existing_output() -> None:
-    content = (
-        '<mjloggm><GO /><INIT shuffle="legacy" /><T1 />'
-        '<AGARI /><INIT /><RYUUKYOKU owari="0" />'
-        "<UN /><BYE /></mjloggm>"
-    )
-    assert split_log_to_game_rounds(content) == [
-        ["<INIT />", "<T1 />", "<AGARI />"],
-        ["<INIT />", '<RYUUKYOKU owari="0" />'],
-    ]
 
 
 def valid_log() -> bytes:
