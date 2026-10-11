@@ -84,7 +84,7 @@ def test_import_operations_report_actual_insertions(
                 "houou_logs.yakuman.fetch_yakuman_log_ids_text",
                 return_value="",
             ),
-            patch("houou_logs.yakuman.extract_ids", return_value=ids),
+            patch("houou_logs.yakuman.iter_ids", return_value=ids),
         ):
             now = datetime(2025, 2, 1, tzinfo=UTC)
             assert yakuman(db_path, 2025, 1, now) == 2

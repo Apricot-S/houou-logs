@@ -4,7 +4,7 @@
 
 import sqlite3
 import sys
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -116,11 +116,8 @@ def create_logs_status_filter_index(conn: sqlite3.Connection) -> None:
 
 def insert_log_entries(
     cursor: sqlite3.Cursor,
-    entries: list[LogEntry],
+    entries: Iterable[LogEntry],
 ) -> int:
-    if not entries:
-        return 0
-
     values = (
         (
             entry.id,

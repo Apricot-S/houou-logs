@@ -2,16 +2,21 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+from contextlib import closing
 from datetime import UTC, datetime
+from pathlib import Path
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
+from houou_logs import db
+from houou_logs import yakuman as yakuman_module
 from houou_logs.db import LogEntry
 from houou_logs.exceptions import UserInputError
 from houou_logs.yakuman import (
     build_url,
-    extract_ids,
-    parse_entries,
+    iter_entries,
+    iter_ids,
     parse_id,
     validate_yakuman_log_date,
 )
@@ -85,7 +90,7 @@ def test_build_url() -> None:
     assert build_url(2025, 1) == "https://tenhou.net/sc/2025/01/ykm.js"
 
 
-def test_extract_ids_new_format() -> None:
+def test_iter_ids_new_format() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ykm=['01/31 23:57','etra','[1,[12,14,15,116,118],[50794,47721,49674],12]',[39],'2025013123gm-0001-0000-12b924e3&tw=2&ts=4','01/31 23:40','åŽŸçˆ†','[137,[24,25,26,28,30,31,60,61,63,73,74,75,109,110],[],109]',[41],'2025013123gm-0089-0000-a148333d&tw=1&ts=9'];
@@ -95,19 +100,19 @@ sw();
         ("01/31 23:57", "2025013123gm-0001-0000-12b924e3"),
         ("01/31 23:40", "2025013123gm-0089-0000-a148333d"),
     ]
-    assert extract_ids(text) == ids
+    assert list(iter_ids(text)) == ids
 
 
-def test_extract_ids_new_format_empty() -> None:
+def test_iter_ids_new_format_empty() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ykm=[];
 sw();
 """
-    assert extract_ids(text) == []
+    assert list(iter_ids(text)) == []
 
 
-def test_extract_ids_new_format_raises_error_when_ykm_not_found() -> None:
+def test_iter_ids_new_format_raises_error_when_ykm_not_found() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ['01/31 23:57','etra','[1,[12,14,15,116,118],[50794,47721,49674],12]',[39],'2025013123gm-0001-0000-12b924e3&tw=2&ts=4','01/31 23:40','åŽŸçˆ†','[137,[24,25,26,28,30,31,60,61,63,73,74,75,109,110],[],109]',[41],'2025013123gm-0089-0000-a148333d&tw=1&ts=9'];
@@ -115,10 +120,10 @@ sw();
 """  # noqa: E501
 
     with pytest.raises(RuntimeError):
-        extract_ids(text)
+        list(iter_ids(text))
 
 
-def test_extract_ids_raises_error_when_ykm_is_malformed() -> None:
+def test_iter_ids_raises_error_when_ykm_is_malformed() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ykm=[foo];
@@ -126,10 +131,10 @@ sw();
 """
 
     with pytest.raises(RuntimeError, match="failed to parse ykm array"):
-        extract_ids(text)
+        list(iter_ids(text))
 
 
-def test_extract_ids_new_format_rejects_invalid_length() -> None:
+def test_iter_ids_new_format_rejects_invalid_length() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ykm=['01/31 23:57','etra'];
@@ -137,10 +142,10 @@ sw();
 """
 
     with pytest.raises(RuntimeError, match="invalid new ykm array length"):
-        extract_ids(text)
+        list(iter_ids(text))
 
 
-def test_extract_ids_new_format_rejects_invalid_entry() -> None:
+def test_iter_ids_new_format_rejects_invalid_entry() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
 ykm=['01/31 23:57','etra','[1]',[39],123];
@@ -148,10 +153,10 @@ sw();
 """
 
     with pytest.raises(TypeError, match="invalid new ykm array entry"):
-        extract_ids(text)
+        list(iter_ids(text))
 
 
-def test_extract_ids_old_format() -> None:
+def test_iter_ids_old_format() -> None:
     text = """total=451693;
 
 updated="2008/02/01 01:17";
@@ -172,10 +177,10 @@ sw();
         ("01/31 23:58", "2008013123gm-00c1-0000-6ec331ef"),
         ("01/31 23:52", "2008013123gm-0009-0000-5ab263c2"),
     ]
-    assert extract_ids(text) == ids
+    assert list(iter_ids(text)) == ids
 
 
-def test_extract_ids_old_format_skips_invalid_entry() -> None:
+def test_iter_ids_old_format_skips_invalid_entry() -> None:
     text = """total=451693;
 updated="2008/02/01 01:17";
 ykm=[
@@ -185,7 +190,7 @@ ykm=[
 sw();
 """  # noqa: E501
 
-    assert extract_ids(text) == [
+    assert list(iter_ids(text)) == [
         ("01/31 23:52", "2008013123gm-0009-0000-5ab263c2"),
     ]
 
@@ -253,13 +258,13 @@ def test_parse_id_rejects_invalid_yakuman_log_date() -> None:
         parse_id(2007, "invalid", "2007041610gm-00c1-0000-75574173")
 
 
-def test_parse_entries_skips_invalid_yakuman_log_id() -> None:
+def test_iter_entries_skips_invalid_yakuman_log_id() -> None:
     ids = [
         ("04/16 08:15", "invalid"),
         ("04/16 10:27", "2007041610gm-00c1-0000-75574173"),
     ]
 
-    entries = parse_entries(2007, ids)
+    entries = list(iter_entries(2007, iter(ids)))
 
     assert entries == [
         LogEntry(
@@ -272,3 +277,51 @@ def test_parse_entries_skips_invalid_yakuman_log_id() -> None:
             log=None,
         ),
     ]
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_yakuman_iterator_transaction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    failure: bool,
+) -> None:
+    path = tmp_path / "yakuman.db"
+    existing_id = "2025010100gm-00a9-0000-00000000"
+    new_id = "2025010101gm-00a9-0000-00000000"
+    with closing(db.open_db(path)) as conn, conn:
+        db.setup_table(conn)
+        db.insert_log_entries(
+            conn.cursor(),
+            [
+                parse_id(2025, "01/01 00:00", existing_id),
+            ],
+        )
+    array: list = ["01/01 00:00", "name", "data", [], new_id] * 2
+    array += [
+        "01/01 00:00",
+        "name",
+        "data",
+        [],
+        123 if failure else existing_id,
+    ]
+    monkeypatch.setattr(yakuman_module, "create_session", MagicMock())
+    monkeypatch.setattr(
+        yakuman_module,
+        "fetch_yakuman_log_ids_text",
+        Mock(
+            return_value=f"ykm={array!r};",
+        ),
+    )
+    # Verify a valid entry is yielded before the later structural error.
+    ids = iter_ids(f"ykm={array!r};")
+    assert next(ids) == ("01/01 00:00", new_id)
+    now = datetime(2025, 2, 1, tzinfo=UTC)
+    if failure:
+        with pytest.raises(TypeError, match="invalid new ykm array entry"):
+            yakuman_module.yakuman(path, 2025, 1, now)
+    else:
+        assert yakuman_module.yakuman(path, 2025, 1, now) == 1
+    with closing(db.open_db(path)) as conn:
+        actual = {row[0] for row in conn.execute("SELECT id FROM logs")}
+        assert actual == ({existing_id} if failure else {existing_id, new_id})

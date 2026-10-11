@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.exceptions import UserInputError
-from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, extract_log_entries
+from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, iter_log_entries
 
 
 def validate_archive(archive_path: Path) -> None:
@@ -45,8 +45,7 @@ def import_(db_path: str | Path, archive_path: Path) -> int:
             archive_files = list(iter_houou_archive_files(zf))
             for info in tqdm(archive_files):
                 with zf.open(info) as f:
-                    entries = extract_log_entries(info.filename, f)
-
-                num_logs += db.insert_log_entries(cursor, entries)
+                    entries = iter_log_entries(info.filename, f)
+                    num_logs += db.insert_log_entries(cursor, entries)
 
     return num_logs

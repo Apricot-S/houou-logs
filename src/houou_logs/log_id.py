@@ -4,6 +4,7 @@
 
 import gzip
 import re
+from collections.abc import Iterable, Iterator
 from typing import IO
 
 from tqdm import tqdm
@@ -19,13 +20,6 @@ LOG_ID_PATTERN = re.compile(
 
 TYPE_IS_HANCHAN = 0x008
 TYPE_IS_3_PLAYERS = 0x010
-
-
-def extract_ids(text: str) -> list[tuple[str, str]]:
-    matches = LINE_PATTERN.findall(text)
-    if not matches:
-        return []
-    return matches
 
 
 def parse_date(time: str, log_date: str) -> str:
@@ -64,19 +58,26 @@ def parse_id(time: str, log_id: str) -> LogEntry:
     )
 
 
-def extract_log_entries(filename: str, fileobj: IO[bytes]) -> list[LogEntry]:
+def iter_log_entries(filename: str, fileobj: IO[bytes]) -> Iterator[LogEntry]:
+    """Read lines without closing the caller's file object."""
     if filename.endswith(".html.gz"):
         # Logs from 2013 onwards are compressed
-        with gzip.open(fileobj, mode="rt", encoding="utf-8") as gz:
-            text = gz.read()
+        with gzip.open(fileobj, mode="rb") as gz:
+            yield from _iter_log_entries(filename, gz)
     else:
-        text = fileobj.read().decode("utf-8")
+        yield from _iter_log_entries(filename, fileobj)
 
-    ids = extract_ids(text)
-    entries = []
-    for time, log_id in ids:
-        try:
-            entries.append(parse_id(time, log_id))
-        except ValueError as e:
-            tqdm.write(f"{filename}: {e}")
-    return entries
+
+def _iter_log_entries(
+    filename: str,
+    lines: Iterable[bytes],
+) -> Iterator[LogEntry]:
+    for line in lines:
+        for match in LINE_PATTERN.finditer(line.decode("utf-8")):
+            time, log_id = match.groups()
+            try:
+                entry = parse_id(time, log_id)
+            except ValueError as e:
+                tqdm.write(f"{filename}: {e}")
+            else:
+                yield entry
