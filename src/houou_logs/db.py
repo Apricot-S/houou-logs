@@ -117,9 +117,9 @@ def create_logs_status_filter_index(conn: sqlite3.Connection) -> None:
 def insert_log_entries(
     cursor: sqlite3.Cursor,
     entries: list[LogEntry],
-) -> None:
+) -> int:
     if not entries:
-        return
+        return 0
 
     values = (
         (
@@ -142,6 +142,7 @@ def insert_log_entries(
         """,  # noqa: E501
         values,
     )
+    return cursor.rowcount
 
 
 def list_undownloaded_log_ids_after(
@@ -369,10 +370,8 @@ def count_log_contents(
     cursor.execute(sql, params)
     count = cursor.fetchone()[0]
 
-    if offset > 0:
-        count = max(count - offset, 0)
-
     if limit is not None:
+        count = max(count - offset, 0)
         return min(count, limit)
 
     return count
