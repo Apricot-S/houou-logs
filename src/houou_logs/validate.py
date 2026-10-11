@@ -37,58 +37,6 @@ def iter_processed_log_id_batches(
         yield log_ids
 
 
-def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
-    root = ET.fromstring(log_content)  # noqa: S314
-    if root.tag != "mjloggm":
-        msg = "invalid root tag, expected <mjloggm>"
-        raise InvalidLogContentError(msg)
-
-    rounds: list[list[str]] = []
-    current_round: list[str] = []
-    game_ended = False
-
-    for elem in root:
-        tagname = elem.tag
-
-        if game_ended and tagname not in ("UN", "BYE"):
-            # After game end, only connection-related tags (UN/BYE)
-            # are allowed.
-            msg = f"unexpected element <{tagname}> after game end"
-            raise InvalidLogContentError(msg)
-
-        if tagname in ("SHUFFLE", "TAIKYOKU", "GO"):
-            # Skip tags that are not part of round content
-            continue
-
-        if tagname == "INIT":
-            # A new round starts at INIT.
-            if current_round:
-                # If there is an ongoing round, close it first.
-                rounds.append(current_round)
-                current_round = []
-
-            # Remove legacy 'shuffle' attribute if present
-            elem.attrib.pop("shuffle", None)
-
-        if tagname in ("AGARI", "RYUUKYOKU") and "owari" in elem.attrib:
-            # Game ends when 'owari' attribute is present.
-            current_round.append(ET.tostring(elem, encoding="unicode"))
-            rounds.append(current_round)
-            current_round = []
-            game_ended = True
-            continue
-
-        # Append the element to the current round
-        current_round.append(ET.tostring(elem, encoding="unicode"))
-
-    if not game_ended:
-        # If no 'owari' was found, the log is incomplete
-        msg = "log ended without 'owari' attribute"
-        raise InvalidLogContentError(msg)
-
-    return rounds
-
-
 def validate_log_structure(log_content: str) -> bool:
     # Parse the entire document before checking the game-end marker.
     root = ET.fromstring(log_content)  # noqa: S314

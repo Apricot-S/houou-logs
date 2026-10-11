@@ -158,8 +158,6 @@ Validate that all downloaded mjlog XML in the database can be parsed correctly.
 If an invalid or unreadable log is found, this command resets that log entry to the undownloaded state.
 This allows a later `download` run to fetch it again.
 
-In addition to validation, this command also serves as a practical example of how to parse mjlog XML at the tag level.
-
 ```sh
 houou-logs validate <db-path>
 ```

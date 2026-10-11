@@ -9,10 +9,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from examples.split_log_to_game_rounds import split_log_to_game_rounds
 
 from houou_logs import db
 from houou_logs import validate as validate_module
-from houou_logs.exceptions import InvalidLogContentError
 
 
 @pytest.mark.parametrize(
@@ -99,9 +99,9 @@ def test_validation_matches_round_splitting(
 ) -> None:
     try:
         previous_result = bool(
-            validate_module.split_log_to_game_rounds(content),
+            split_log_to_game_rounds(content),
         )
-    except (ET.ParseError, InvalidLogContentError):
+    except (ET.ParseError, ValueError):
         previous_result = False
     assert previous_result == expected
     assert validate_module.is_valid_log_content(
@@ -112,7 +112,9 @@ def test_validation_matches_round_splitting(
 
 def test_validation_does_not_split_or_serialize_elements() -> None:
     with (
-        patch("houou_logs.validate.split_log_to_game_rounds") as split,
+        patch(
+            "examples.split_log_to_game_rounds.split_log_to_game_rounds",
+        ) as split,
         patch("houou_logs.validate.ET.tostring") as serialize,
     ):
         assert validate_module.is_valid_log_content("log-id", valid_log())
@@ -138,7 +140,7 @@ def test_round_splitting_preserves_existing_output() -> None:
         '<AGARI /><INIT /><RYUUKYOKU owari="0" />'
         "<UN /><BYE /></mjloggm>"
     )
-    assert validate_module.split_log_to_game_rounds(content) == [
+    assert split_log_to_game_rounds(content) == [
         ["<INIT />", "<T1 />", "<AGARI />"],
         ["<INIT />", '<RYUUKYOKU owari="0" />'],
     ]
