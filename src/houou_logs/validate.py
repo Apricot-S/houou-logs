@@ -5,6 +5,7 @@
 import gzip
 import sqlite3
 import xml.etree.ElementTree as ET
+import zlib
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
@@ -13,6 +14,7 @@ from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.download import validate_db_path
+from houou_logs.exceptions import InvalidLogContentError
 
 VALIDATE_BATCH_SIZE = 1000
 
@@ -39,7 +41,7 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
     root = ET.fromstring(log_content)  # noqa: S314
     if root.tag != "mjloggm":
         msg = "invalid root tag, expected <mjloggm>"
-        raise ValueError(msg)
+        raise InvalidLogContentError(msg)
 
     rounds: list[list[str]] = []
     current_round: list[str] = []
@@ -52,7 +54,7 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
             # After game end, only connection-related tags (UN/BYE)
             # are allowed.
             msg = f"unexpected element <{tagname}> after game end"
-            raise ValueError(msg)
+            raise InvalidLogContentError(msg)
 
         if tagname in ("SHUFFLE", "TAIKYOKU", "GO"):
             # Skip tags that are not part of round content
@@ -82,7 +84,7 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
     if not game_ended:
         # If no 'owari' was found, the log is incomplete
         msg = "log ended without 'owari' attribute"
-        raise ValueError(msg)
+        raise InvalidLogContentError(msg)
 
     return rounds
 
@@ -96,7 +98,7 @@ def is_valid_log_content(
         if compressed_content is not None:
             decompressed = gzip.decompress(compressed_content)
             content = decompressed.decode("utf-8")
-    except Exception as e:  # noqa: BLE001
+    except (gzip.BadGzipFile, EOFError, zlib.error, UnicodeDecodeError) as e:
         tqdm.write(f"{log_id}: failed to decompress: {e}")
         return False
 
@@ -105,7 +107,7 @@ def is_valid_log_content(
 
     try:
         parsed_rounds = split_log_to_game_rounds(content)
-    except Exception as e:  # noqa: BLE001
+    except (ET.ParseError, InvalidLogContentError) as e:
         tqdm.write(f"{log_id}: failed to parse: {e}")
         return False
 

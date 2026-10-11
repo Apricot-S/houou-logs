@@ -7,10 +7,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 from niquests import Session
+from niquests.exceptions import RequestException
 
+from houou_logs import db
 from houou_logs.download import (
     build_url,
     compress_log_content,
+    download,
     fetch_log_content_for_download,
     iter_undownloaded_log_id_batches,
     validate_db_path,
@@ -18,7 +21,7 @@ from houou_logs.download import (
     validate_limit,
     validate_players,
 )
-from houou_logs.exceptions import UserInputError
+from houou_logs.exceptions import LogFetchError, UserInputError
 
 
 def test_validate_db_path_when_file_exists(tmp_path: Path) -> None:
@@ -112,12 +115,16 @@ def test_fetch_log_content_for_download_success() -> None:
     assert actual == content
 
 
-def test_fetch_log_content_for_download_fetch_error() -> None:
+@pytest.mark.parametrize(
+    "error",
+    [LogFetchError("failed"), RequestException()],
+)
+def test_fetch_log_content_for_download_fetch_error(error: Exception) -> None:
     mock_session = Mock(spec_set=Session)
 
     with patch(
         "houou_logs.download.fetch_log_content",
-        side_effect=RuntimeError("failed"),
+        side_effect=error,
     ):
         was_error, actual = fetch_log_content_for_download(
             mock_session,
@@ -147,3 +154,42 @@ def test_compress_log_content_compress_error() -> None:
 
     assert was_error
     assert compressed_content is None
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError, MemoryError])
+@pytest.mark.parametrize("stage", ["fetch_log_content", "gzip.compress"])
+def test_download_unexpected_error_preserves_unprocessed_log(
+    db_path: Path,
+    error_type: type[Exception],
+    stage: str,
+) -> None:
+    log_id = "2025010100gm-00a9-0000-00000000"
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        db.insert_log_entries(
+            conn.cursor(),
+            [
+                db.LogEntry(
+                    log_id,
+                    "2025-01-01",
+                    4,
+                    is_tonpu=False,
+                    is_processed=False,
+                    was_error=False,
+                    log=None,
+                ),
+            ],
+        )
+    with (
+        patch("houou_logs.download.create_session"),
+        patch("houou_logs.download.fetch_log_content", return_value=b"log"),
+        patch(f"houou_logs.download.{stage}", side_effect=error_type),
+        pytest.raises(error_type),
+    ):
+        download(db_path, None, None, None)
+    with db.open_db(db_path) as conn:
+        row = conn.execute(
+            "SELECT is_processed, was_error, log FROM logs WHERE id = ?",
+            (log_id,),
+        ).fetchone()
+    assert row == (0, 0, None)

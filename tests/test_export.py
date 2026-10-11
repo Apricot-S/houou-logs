@@ -93,7 +93,10 @@ def test_export_writes_decompressed_bytes_without_utf8_validation(
 
 
 @pytest.mark.parametrize("existing", [False, True])
-@pytest.mark.parametrize("failure", ["decompress", "write", "replace"])
+@pytest.mark.parametrize(
+    "failure",
+    ["decompress", "write", "replace", "bug", "memory"],
+)
 def test_export_failure_preserves_destination_and_removes_temp_file(
     db_path: Path,
     tmp_path: Path,
@@ -151,6 +154,22 @@ def test_export_failure_preserves_destination_and_removes_temp_file(
             side_effect=OSError("replace failed"),
         ):
             num_logs = run_export()
+    elif failure in ("bug", "memory"):
+        error_type = RuntimeError if failure == "bug" else MemoryError
+
+        def fail_unexpectedly(source: BinaryIO, target: BinaryIO) -> None:
+            target.write(source.read(4))
+            raise error_type
+
+        with (
+            patch(
+                "houou_logs.export.shutil.copyfileobj",
+                side_effect=fail_unexpectedly,
+            ),
+            pytest.raises(error_type),
+        ):
+            run_export()
+        num_logs = 0
     else:
         num_logs = run_export()
 

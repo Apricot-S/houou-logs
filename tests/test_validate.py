@@ -5,11 +5,55 @@
 import gzip
 import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from houou_logs import db
 from houou_logs import validate as validate_module
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"not gzip",
+        gzip.compress(b"log")[:-4],
+        gzip.compress(b"\xff"),
+        gzip.compress(b"<broken"),
+        gzip.compress(b"<other />"),
+        gzip.compress(b"<mjloggm />"),
+    ],
+)
+def test_expected_invalid_content_is_rejected(content: bytes) -> None:
+    assert not validate_module.is_valid_log_content("log-id", content)
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, ValueError, MemoryError])
+@pytest.mark.parametrize(
+    "stage",
+    ["gzip.decompress", "split_log_to_game_rounds"],
+)
+def test_validate_unexpected_error_preserves_saved_content(
+    db_path: Path,
+    error_type: type[Exception],
+    stage: str,
+) -> None:
+    log_id = "2025010100gm-00a9-0000-00000000"
+    content = valid_log()
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        insert_processed_log(conn.cursor(), log_id, content)
+    with (
+        patch(f"houou_logs.validate.{stage}", side_effect=error_type),
+        pytest.raises(error_type),
+    ):
+        validate_module.validate(db_path)
+    with db.open_db(db_path) as conn:
+        row = conn.execute(
+            "SELECT is_processed, was_error, log FROM logs WHERE id = ?",
+            (log_id,),
+        ).fetchone()
+    assert row == (1, 0, content)
 
 
 def compress_log(content: str) -> bytes:

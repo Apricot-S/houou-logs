@@ -4,16 +4,18 @@
 
 import gzip
 import sqlite3
+import zlib
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
 import niquests
 from niquests import Session
+from niquests.exceptions import RequestException
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.exceptions import UserInputError
+from houou_logs.exceptions import LogFetchError, UserInputError
 from houou_logs.session import TIMEOUT, create_session
 
 DOWNLOAD_BATCH_SIZE = 1000
@@ -51,21 +53,21 @@ def fetch_log_content(session: Session, url: str) -> bytes:
     resp = session.get(url, timeout=TIMEOUT)
     if resp.status_code != niquests.codes["ok"]:
         msg = f"failed to fetch: HTTP {resp.status_code}"
-        raise RuntimeError(msg)
+        raise LogFetchError(msg)
 
     text = resp.text
     if text is None:
         msg = "response text is None (failed to decode or empty response)"
-        raise RuntimeError(msg)
+        raise LogFetchError(msg)
 
     if "mjlog" not in text:
         msg = "no log content in response"
-        raise RuntimeError(msg)
+        raise LogFetchError(msg)
 
     content = resp.content
     if content is None:
         msg = "content could not be retrieved"
-        raise RuntimeError(msg)
+        raise LogFetchError(msg)
 
     return content
 
@@ -78,7 +80,7 @@ def fetch_log_content_for_download(
 
     try:
         content = fetch_log_content(session, url)
-    except Exception as e:  # noqa: BLE001
+    except (RequestException, LogFetchError, UnicodeDecodeError) as e:
         tqdm.write(f"{log_id}: {e}")
         return (True, b"")
 
@@ -91,7 +93,7 @@ def compress_log_content(
 ) -> tuple[bool, bytes | None]:
     try:
         return (False, gzip.compress(content))
-    except Exception as e:  # noqa: BLE001
+    except (OSError, zlib.error) as e:
         tqdm.write(f"{log_id}: failed to compress: {e}")
         return (True, None)
 
