@@ -41,6 +41,12 @@ houou-logs$ uv tool install .
 
 Import a list of log IDs into the database.
 
+Each list file inside the ZIP archive is committed after it has been fully
+read and inserted. If a file fails, its pending changes are rolled back and
+the command stops; previously completed files remain saved. You can rerun
+the same archive: existing log IDs are ignored. Invalid IDs are reported and
+skipped. Import does not update the FileIndex used by `fetch`.
+
 > [!NOTE]
 >
 > - Houou (Phoenix) games are available starting from 2009.

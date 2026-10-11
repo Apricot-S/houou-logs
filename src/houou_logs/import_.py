@@ -48,4 +48,6 @@ def import_(db_path: str | Path, archive_path: Path) -> int:
                     entries = iter_log_entries(info.filename, f)
                     num_logs += db.insert_log_entries(cursor, entries)
 
+                conn.commit()
+
     return num_logs
