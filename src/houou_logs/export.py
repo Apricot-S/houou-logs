@@ -7,6 +7,7 @@ import io
 import shutil
 from contextlib import closing
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from tqdm import tqdm
 
@@ -65,17 +66,29 @@ def export(
 
         for log_id, compressed_content in tqdm(logs_iter, total=num_logs):
             filename = (output_dir / log_id).with_suffix(".xml")
+            temp_path = None
             try:
                 with (
                     gzip.GzipFile(
                         fileobj=io.BytesIO(compressed_content),
                     ) as gz,
-                    filename.open("wb") as f,
+                    NamedTemporaryFile(
+                        mode="wb",
+                        dir=filename.parent,
+                        prefix=f".{filename.name}.",
+                        suffix=".tmp",
+                        delete=False,
+                    ) as f,
                 ):
+                    temp_path = Path(f.name)
                     shutil.copyfileobj(gz, f)
+                temp_path.replace(filename)
             except Exception as e:  # noqa: BLE001
                 tqdm.write(f"{log_id}: failed to decompress: {e}")
                 num_logs -= 1
                 continue
+            finally:
+                if temp_path is not None:
+                    temp_path.unlink(missing_ok=True)
 
     return num_logs

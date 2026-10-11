@@ -4,6 +4,8 @@
 
 import gzip
 from pathlib import Path
+from typing import BinaryIO
+from unittest.mock import patch
 
 import pytest
 
@@ -54,6 +56,7 @@ def test_export_writes_utf8_and_overwrites_existing_file(
 
     assert num_logs == 1
     assert output_file.read_text(encoding="utf-8") == "<mjloggm>東</mjloggm>"
+    assert list(output_dir.iterdir()) == [output_file]
 
 
 def test_export_writes_decompressed_bytes_without_utf8_validation(
@@ -86,3 +89,74 @@ def test_export_writes_decompressed_bytes_without_utf8_validation(
     assert num_logs == 1
     output_file = output_dir / f"{log_id}.xml"
     assert output_file.read_bytes() == b"<mjloggm>\xff</mjloggm>"
+    assert list(output_dir.iterdir()) == [output_file]
+
+
+@pytest.mark.parametrize("existing", [False, True])
+@pytest.mark.parametrize("failure", ["decompress", "write", "replace"])
+def test_export_failure_preserves_destination_and_removes_temp_file(
+    db_path: Path,
+    tmp_path: Path,
+    *,
+    existing: bool,
+    failure: str,
+) -> None:
+    log_id = "2025010100gm-00a9-0000-00000000"
+    content = gzip.compress(b"<mjloggm />")
+    if failure == "decompress":
+        # Truncate the trailer to fail after reading data.
+        content = content[:-4]
+
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        db.insert_log_entries(
+            conn.cursor(),
+            [
+                db.LogEntry(
+                    id=log_id,
+                    date="2025-01-01T00:00",
+                    num_players=4,
+                    is_tonpu=False,
+                    is_processed=True,
+                    was_error=False,
+                    log=content,
+                ),
+            ],
+        )
+
+    output_dir = tmp_path / "xml"
+    output_dir.mkdir()
+    output_file = output_dir / f"{log_id}.xml"
+    if existing:
+        output_file.write_bytes(b"original XML")
+
+    def fail_after_partial_write(source: BinaryIO, target: BinaryIO) -> None:
+        target.write(source.read(4))
+        msg = "write failed"
+        raise OSError(msg)
+
+    def run_export() -> int:
+        return export(db_path, output_dir, None, None, None, 0)
+
+    if failure == "write":
+        with patch(
+            "houou_logs.export.shutil.copyfileobj",
+            side_effect=fail_after_partial_write,
+        ):
+            num_logs = run_export()
+    elif failure == "replace":
+        with patch.object(
+            Path,
+            "replace",
+            side_effect=OSError("replace failed"),
+        ):
+            num_logs = run_export()
+    else:
+        num_logs = run_export()
+
+    assert num_logs == 0
+    if existing:
+        assert output_file.read_bytes() == b"original XML"
+        assert list(output_dir.iterdir()) == [output_file]
+    else:
+        assert list(output_dir.iterdir()) == []
