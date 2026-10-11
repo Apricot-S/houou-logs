@@ -12,7 +12,7 @@ import niquests
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, extract_log_entries
+from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, iter_log_entries
 from houou_logs.session import TIMEOUT, create_session
 
 MIN_FETCH_INTERVAL = timedelta(minutes=20)
@@ -114,9 +114,9 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 content = fetch_log_file_content(session, url)
 
                 with io.BytesIO(content) as f:
-                    entries = extract_log_entries(filename, f)
+                    entries = iter_log_entries(filename, f)
+                    num_logs += db.insert_log_entries(cursor, entries)
 
-                num_logs += db.insert_log_entries(cursor, entries)
                 db.insert_file_index(cursor, filename, size)
 
                 conn.commit()

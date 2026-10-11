@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import gzip
+import io
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,7 @@ from houou_logs.db import LogEntry
 from houou_logs.log_id import (
     extract_ids,
     extract_log_entries,
+    iter_log_entries,
     parse_date,
     parse_id,
     parse_type,
@@ -145,3 +148,24 @@ def test_extract_log_entries_skips_invalid_log_id(tmp_path: Path) -> None:
             log=None,
         ),
     ]
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+def test_iterator_is_lazy_and_keeps_file_open(
+    *,
+    compressed: bool,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    content = b'00:00 log=2009020100gm-00a9-0000-00000000">\r\n'
+    content += b'00:01 log=invalid">\n'
+    content += b'23:02 log=2009020123gm-00a9-0000-00000001">'
+    filename = "scc.html.gz" if compressed else "scc.html"
+    with io.BytesIO(gzip.compress(content) if compressed else content) as f:
+        entries = iter_log_entries(filename, f)
+        assert next(entries).id == "2009020100gm-00a9-0000-00000000"
+        assert capsys.readouterr().out == ""
+        assert [entry.id for entry in entries] == [
+            "2009020123gm-00a9-0000-00000001",
+        ]
+        assert not f.closed
+    assert capsys.readouterr().out == f"{filename}: invalid log ID: invalid\n"

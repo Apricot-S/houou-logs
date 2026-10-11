@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import gzip
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock
@@ -284,5 +286,90 @@ def test_fetch_updates_attempt_time_before_file_index_request(
             fetch_module.FETCH_KIND_LATEST,
         )
         assert last_attempt_time == fixed_now
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+@pytest.mark.parametrize("failure", [None, "decode", "database", "index"])
+def test_fetch_file_is_atomic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    compressed: bool,
+    failure: str | None,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filename = "scc.html.gz" if compressed else "scc.html"
+    content = b'00:00 log=2009020100gm-00a9-0000-00000000">\n' * 2
+    if failure == "decode":
+        content += b"\xff\n"
+    if compressed:
+        content = gzip.compress(content)
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(
+            return_value=f"list([{{file:'{filename}',size:100}}]);",
+        ),
+    )
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_log_file_content",
+        Mock(
+            return_value=content,
+        ),
+    )
+    statements: list[str] = []
+    original_open = db.open_db
+
+    def traced_open(db_path: str | Path) -> sqlite3.Connection:
+        conn = original_open(db_path)
+        conn.set_trace_callback(statements.append)
+        if failure == "database":
+            conn.execute(
+                "CREATE TRIGGER reject_log BEFORE INSERT ON logs "
+                "BEGIN SELECT RAISE(ABORT, 'insert failure'); END;",
+            )
+        return conn
+
+    # Create the tables before installing the failure trigger.
+    initial = original_open(path)
+    db.setup_table(initial)
+    initial.close()
+    monkeypatch.setattr(db, "open_db", traced_open)
+    if failure == "index":
+        monkeypatch.setattr(
+            db,
+            "insert_file_index",
+            Mock(
+                side_effect=sqlite3.OperationalError("index failure"),
+            ),
+        )
+    if failure:
+        with pytest.raises((UnicodeDecodeError, sqlite3.DatabaseError)):
+            fetch_module.fetch(path, archive=False)
+    else:
+        assert fetch_module.fetch(path, archive=False) == 1
+    if not failure:
+        start = next(
+            i for i, sql in enumerate(statements) if "INSERT INTO logs" in sql
+        )
+        end = next(
+            i
+            for i in range(start, len(statements))
+            if statements[i] == "COMMIT"
+        )
+        assert any(
+            "INSERT INTO file_index" in sql for sql in statements[start:end]
+        )
+        # The outer context also commits an empty transaction.
+        assert statements[start:].count("COMMIT") == 2
+    conn = original_open(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == (0 if failure else 1)
+        assert conn.execute(
+            "SELECT file, size FROM file_index",
+        ).fetchall() == ([] if failure else [(filename, 100)])
     finally:
         conn.close()
