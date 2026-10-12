@@ -305,20 +305,20 @@ def iter_processed_log_contents_after(
     limit: int,
 ) -> Generator[tuple[str, bytes | None]]:
     # Consume the query before updating rows in its status index.
-    conditions = "is_processed = 1"
+    after_condition = ""
     params: list = []
     if after_id is not None:
-        conditions += " AND id > ?"
+        after_condition = " AND id > ?"
         params.append(after_id)
     # Merge status-index scans in ID order without sorting BLOBs.
     params = [*params, *params, limit]
     cursor.execute(
         f"""
         SELECT id, log FROM logs
-        WHERE {conditions} AND was_error = 0
+        WHERE is_processed = 1 AND was_error = 0{after_condition}
         UNION ALL
         SELECT id, log FROM logs
-        WHERE {conditions} AND was_error = 1
+        WHERE is_processed = 1 AND was_error = 1{after_condition}
         ORDER BY id ASC
         LIMIT ?;
         """,  # noqa: S608
