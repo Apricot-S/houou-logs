@@ -327,21 +327,6 @@ def iter_processed_log_contents_after(
     yield from cursor
 
 
-def get_log_content(cursor: sqlite3.Cursor, log_id: str) -> bytes | None:
-    cursor.execute(
-        """
-        SELECT log
-        FROM logs
-        WHERE id = ?;
-        """,
-        (log_id,),
-    )
-    row = cursor.fetchone()
-    if row is None:
-        return None
-    return row[0]
-
-
 def iter_log_contents(
     cursor: sqlite3.Cursor,
     players: int | None,

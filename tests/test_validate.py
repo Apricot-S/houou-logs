@@ -99,11 +99,11 @@ def test_validate_streams_batches_without_per_log_selects(
     monkeypatch.setattr(db, "open_db", open_traced)
     monkeypatch.setattr(validate_module, "is_valid_log_content", check)
     monkeypatch.setattr(validate_module, "VALIDATE_BATCH_SIZE", 2)
-    with patch.object(db, "get_log_content", side_effect=AssertionError):
-        assert validate_module.validate(db_path) == (True, 3, 7)
+    assert validate_module.validate(db_path) == (True, 3, 7)
     assert seen == [f"log-{index}" for index in range(6)]
     body_selects = [sql for sql in statements if "SELECT id, log" in sql]
     assert len(body_selects) == 4  # Three batches and the final empty query.
+    assert not any("SELECT log" in sql for sql in statements)
     with original_open(db_path) as conn:
         for sql in body_selects:
             plan = conn.execute("EXPLAIN QUERY PLAN " + sql).fetchall()
