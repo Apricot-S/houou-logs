@@ -3,12 +3,12 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
-import sqlite3
 import xml.etree.ElementTree as ET
 import zlib
-from collections.abc import Iterator
 from contextlib import closing
+from io import BytesIO, StringIO, TextIOWrapper
 from pathlib import Path
+from typing import TextIO
 
 from tqdm import tqdm
 
@@ -19,42 +19,51 @@ from houou_logs.exceptions import InvalidLogContentError
 VALIDATE_BATCH_SIZE = 1000
 
 
-def iter_processed_log_id_batches(
-    cursor: sqlite3.Cursor,
-    batch_size: int,
-) -> Iterator[list[str]]:
-    last_id = None
-    while True:
-        log_ids = db.list_all_processed_log_ids_after(
-            cursor,
-            last_id,
-            batch_size,
-        )
-        if not log_ids:
-            break
+class _LogStructureTarget:
+    def __init__(self) -> None:
+        self.depth = 0
+        self.game_ended = False
+        self.error: str | None = None
 
-        last_id = log_ids[-1]
-        yield log_ids
+    def start(self, tag: str, attrs: dict[str, str]) -> None:
+        if self.depth == 0 and tag != "mjloggm":
+            self.error = "invalid root tag, expected <mjloggm>"
+        elif self.depth == 1:
+            if (
+                self.game_ended
+                and tag not in ("UN", "BYE")
+                and self.error is None
+            ):
+                self.error = f"unexpected element <{tag}> after game end"
+            if tag in ("AGARI", "RYUUKYOKU") and "owari" in attrs:
+                self.game_ended = True
+        self.depth += 1
 
+    def end(self, _tag: str) -> None:
+        self.depth -= 1
 
-def validate_log_structure(log_content: str) -> bool:
-    # Parse the entire document before checking the game-end marker.
-    root = ET.fromstring(log_content)  # noqa: S314
-    if root.tag != "mjloggm":
-        msg = "invalid root tag, expected <mjloggm>"
-        raise InvalidLogContentError(msg)
+    def data(self, data: str) -> None:
+        pass
 
-    game_ended = False
-    for elem in root:
-        if game_ended and elem.tag not in ("UN", "BYE"):
-            msg = f"unexpected element <{elem.tag}> after game end"
+    def close(self) -> bool:
+        if self.error is not None:
+            raise InvalidLogContentError(self.error)
+        if not self.game_ended:
+            msg = "log ended without 'owari' attribute"
             raise InvalidLogContentError(msg)
-        if elem.tag in ("AGARI", "RYUUKYOKU") and "owari" in elem.attrib:
-            game_ended = True
+        return True
 
-    if not game_ended:
-        msg = "log ended without 'owari' attribute"
-        raise InvalidLogContentError(msg)
+
+def validate_log_structure(log_content: str | TextIO) -> bool:
+    # Avoid retaining elements, text, or the complete XML tree.
+    # Delay structural errors until close so syntax is checked to EOF.
+    parser = ET.XMLParser(target=_LogStructureTarget())  # noqa: S314
+    stream = (
+        StringIO(log_content) if isinstance(log_content, str) else log_content
+    )
+    while chunk := stream.read(64 * 1024):
+        parser.feed(chunk)
+    parser.close()
     return True
 
 
@@ -62,19 +71,17 @@ def is_valid_log_content(
     log_id: str,
     compressed_content: bytes | None,
 ) -> bool:
-    content = None
+    if not compressed_content:
+        return False
     try:
-        if compressed_content is not None:
-            content = gzip.decompress(compressed_content).decode("utf-8")
+        with (
+            gzip.GzipFile(fileobj=BytesIO(compressed_content)) as decompressed,
+            TextIOWrapper(decompressed, encoding="utf-8") as content,
+        ):
+            return validate_log_structure(content)
     except (gzip.BadGzipFile, EOFError, zlib.error, UnicodeDecodeError) as e:
         tqdm.write(f"{log_id}: failed to decompress: {e}")
         return False
-
-    if not content:
-        return False
-
-    try:
-        return validate_log_structure(content)
     except (ET.ParseError, InvalidLogContentError) as e:
         tqdm.write(f"{log_id}: failed to parse: {e}")
         return False
@@ -94,13 +101,20 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
         num_valid_logs = 0
 
         with tqdm(total=num_logs) as progress:
-            for log_ids in iter_processed_log_id_batches(
-                cursor,
-                VALIDATE_BATCH_SIZE,
-            ):
+            last_id = None
+            while True:
                 invalid_ids = []
-                for log_id in log_ids:
-                    compressed_content = db.get_log_content(cursor, log_id)
+                batch_count = 0
+                for (
+                    log_id,
+                    compressed_content,
+                ) in db.iter_processed_log_contents_after(
+                    cursor,
+                    last_id,
+                    VALIDATE_BATCH_SIZE,
+                ):
+                    last_id = log_id
+                    batch_count += 1
                     if is_valid_log_content(log_id, compressed_content):
                         num_valid_logs += 1
                         progress.update(1)
@@ -112,6 +126,9 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
                     invalid_ids.append(log_id)
 
                     progress.update(1)
+
+                if not batch_count:
+                    break
 
                 # Finish reads before starting the batch's writes.
                 # An interrupted batch leaves its contents unchanged.

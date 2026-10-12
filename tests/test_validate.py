@@ -4,6 +4,7 @@
 
 import gzip
 import sqlite3
+import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +13,108 @@ import pytest
 
 from houou_logs import db
 from houou_logs import validate as validate_module
+
+
+def test_structural_error_does_not_hide_late_syntax_error() -> None:
+    with pytest.raises(ET.ParseError):
+        validate_module.validate_log_structure(
+            '<other><AGARI owari="0" /></other><broken',
+        )
+
+
+@pytest.mark.parametrize("damage", ["crc", "truncated", "utf8", "xml"])
+def test_validation_reads_past_chunk_boundary(damage: str) -> None:
+    xml = b'<mjloggm><AGARI owari="0" />' + b" " * (128 * 1024) + b"</mjloggm>"
+    if damage == "utf8":
+        xml += b"\xff"
+    elif damage == "xml":
+        xml += b"<broken"
+    compressed = gzip.compress(xml)
+    if damage == "crc":
+        compressed = (
+            compressed[:-8] + bytes([compressed[-8] ^ 1]) + compressed[-7:]
+        )
+    elif damage == "truncated":
+        compressed = compressed[:-4]
+    assert not validate_module.is_valid_log_content("log-id", compressed)
+
+
+def test_validate_streams_batches_without_per_log_selects(
+    db_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contents = [
+        valid_log(),
+        b"invalid",
+        None,
+        valid_log(),
+        b"invalid",
+        valid_log(),
+    ]
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        for index, content in enumerate(contents):
+            db.insert_log_entries(
+                conn.cursor(),
+                [
+                    db.LogEntry(
+                        id=f"log-{index}",
+                        date="2025-01-01",
+                        num_players=4,
+                        is_tonpu=False,
+                        is_processed=True,
+                        was_error=index == 2,
+                        log=content,
+                    ),
+                ],
+            )
+        db.insert_log_entries(
+            conn.cursor(),
+            [
+                db.LogEntry(
+                    id="pending",
+                    date="2025-01-01",
+                    num_players=4,
+                    is_tonpu=False,
+                    is_processed=False,
+                    was_error=False,
+                    log=None,
+                ),
+            ],
+        )
+    statements: list[str] = []
+    seen: list[str] = []
+    original_open = db.open_db
+    original_validate = validate_module.is_valid_log_content
+
+    def open_traced(path: Path) -> sqlite3.Connection:
+        conn = original_open(path)
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    def check(log_id: str, content: bytes | None) -> bool:
+        seen.append(log_id)
+        return original_validate(log_id, content)
+
+    monkeypatch.setattr(db, "open_db", open_traced)
+    monkeypatch.setattr(validate_module, "is_valid_log_content", check)
+    monkeypatch.setattr(validate_module, "VALIDATE_BATCH_SIZE", 2)
+    with patch.object(db, "get_log_content", side_effect=AssertionError):
+        assert validate_module.validate(db_path) == (True, 3, 7)
+    assert seen == [f"log-{index}" for index in range(6)]
+    body_selects = [sql for sql in statements if "SELECT id, log" in sql]
+    assert len(body_selects) == 4  # Three batches and the final empty query.
+    with original_open(db_path) as conn:
+        for sql in body_selects:
+            plan = conn.execute("EXPLAIN QUERY PLAN " + sql).fetchall()
+            assert not any("TEMP B-TREE" in row[3] for row in plan)
+        rows = conn.execute(
+            "SELECT is_processed, was_error, log FROM logs ORDER BY id",
+        ).fetchall()
+    assert rows == [
+        (1, 0, content) if content == valid_log() else (0, 0, None)
+        for content in contents
+    ] + [(0, 0, None)]
 
 
 @pytest.mark.parametrize(
@@ -32,7 +135,7 @@ def test_expected_invalid_content_is_rejected(content: bytes) -> None:
 @pytest.mark.parametrize("error_type", [RuntimeError, ValueError, MemoryError])
 @pytest.mark.parametrize(
     "stage",
-    ["gzip.decompress", "validate_log_structure"],
+    ["gzip.GzipFile", "validate_log_structure"],
 )
 def test_validate_unexpected_error_preserves_saved_content(
     db_path: Path,

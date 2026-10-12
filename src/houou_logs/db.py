@@ -299,6 +299,34 @@ def list_all_processed_log_ids_after(
     return [row[0] for row in cursor.fetchall()]
 
 
+def iter_processed_log_contents_after(
+    cursor: sqlite3.Cursor,
+    after_id: str | None,
+    limit: int,
+) -> Generator[tuple[str, bytes | None]]:
+    # Consume the query before updating rows in its status index.
+    conditions = "is_processed = 1"
+    params: list = []
+    if after_id is not None:
+        conditions += " AND id > ?"
+        params.append(after_id)
+    # Merge status-index scans in ID order without sorting BLOBs.
+    params = [*params, *params, limit]
+    cursor.execute(
+        f"""
+        SELECT id, log FROM logs
+        WHERE {conditions} AND was_error = 0
+        UNION ALL
+        SELECT id, log FROM logs
+        WHERE {conditions} AND was_error = 1
+        ORDER BY id ASC
+        LIMIT ?;
+        """,  # noqa: S608
+        params,
+    )
+    yield from cursor
+
+
 def get_log_content(cursor: sqlite3.Cursor, log_id: str) -> bytes | None:
     cursor.execute(
         """
