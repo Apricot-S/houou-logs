@@ -305,13 +305,13 @@ def iter_processed_log_contents_after(
     limit: int,
 ) -> Generator[tuple[str, bytes | None]]:
     # Consume the query before updating rows in its status index.
-    after_condition = ""
-    params: list = []
-    if after_id is not None:
+    if after_id is None:
+        after_condition = ""
+        params = (limit,)
+    else:
         after_condition = " AND id > ?"
-        params.append(after_id)
+        params = (after_id, after_id, limit)
     # Merge status-index scans in ID order without sorting BLOBs.
-    params = [*params, *params, limit]
     cursor.execute(
         f"""
         SELECT id, log FROM logs
