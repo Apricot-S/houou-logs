@@ -37,6 +37,14 @@ houou-logs$ uv tool install .
 
 ## Usage
 
+> [!NOTE]
+> Databases created with houou-logs **2.1.2 or earlier** are migrated
+> automatically the first time any command is run with this version.
+> Missing log indexes are added while existing indexes and log data are
+> preserved. No reimport is needed.
+>
+> Creating indexes requires additional disk space and may take some time.
+
 ### Import log IDs from an archive (per year)
 
 Import a list of log IDs into the database.
