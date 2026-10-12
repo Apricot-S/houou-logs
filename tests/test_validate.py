@@ -207,3 +207,74 @@ def test_validate_continues_after_resetting_invalid_log(
         None,
     )
     assert rows[2][1:] == (1, 0, valid_log())
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, KeyboardInterrupt])
+@pytest.mark.parametrize("stage", ["validation", "reset"])
+def test_validate_interrupted_batch_preserves_committed_batches(
+    db_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[BaseException],
+    stage: str,
+) -> None:
+    log_ids = [f"log-{index}" for index in range(6)]
+    contents = [
+        b"invalid",
+        valid_log(),
+        b"invalid",
+        b"invalid",
+        b"invalid",
+        valid_log(),
+    ]
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        for log_id, content in zip(log_ids, contents, strict=True):
+            insert_processed_log(conn.cursor(), log_id, content)
+
+    monkeypatch.setattr(validate_module, "VALIDATE_BATCH_SIZE", 2)
+    original_validate = validate_module.is_valid_log_content
+    original_reset = db.reset_log_content
+
+    def check_content(log_id: str, content: bytes | None) -> bool:
+        # Checking a batch must not hold a write lock.
+        if log_id == log_ids[1]:
+            with sqlite3.connect(db_path, timeout=0) as observer:
+                observer.execute("BEGIN IMMEDIATE")
+                observer.rollback()
+        if stage == "validation" and log_id == log_ids[3]:
+            raise error_type
+        return original_validate(log_id, content)
+
+    def reset_content(cursor: sqlite3.Cursor, log_id: str) -> None:
+        original_reset(cursor, log_id)
+        if stage == "reset" and log_id == log_ids[2]:
+            raise error_type
+
+    monkeypatch.setattr(validate_module, "is_valid_log_content", check_content)
+    monkeypatch.setattr(db, "reset_log_content", reset_content)
+    with pytest.raises(error_type):
+        validate_module.validate(db_path)
+
+    with db.open_db(db_path) as conn:
+        rows = conn.execute(
+            "SELECT is_processed, was_error, log FROM logs ORDER BY id",
+        ).fetchall()
+    assert rows[0] == (0, 0, None)
+    assert rows[1:] == [(1, 0, content) for content in contents[1:]]
+
+    # A rerun checks interrupted and previously unreached entries.
+    monkeypatch.setattr(
+        validate_module,
+        "is_valid_log_content",
+        original_validate,
+    )
+    monkeypatch.setattr(db, "reset_log_content", original_reset)
+    assert validate_module.validate(db_path) == (True, 2, 6)
+    with db.open_db(db_path) as conn:
+        rows = conn.execute(
+            "SELECT is_processed, was_error, log FROM logs ORDER BY id",
+        ).fetchall()
+    assert rows == [
+        (1, 0, content) if content == valid_log() else (0, 0, None)
+        for content in contents
+    ]

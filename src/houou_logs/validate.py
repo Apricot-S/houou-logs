@@ -98,6 +98,7 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
                 cursor,
                 VALIDATE_BATCH_SIZE,
             ):
+                invalid_ids = []
                 for log_id in log_ids:
                     compressed_content = db.get_log_content(cursor, log_id)
                     if is_valid_log_content(log_id, compressed_content):
@@ -108,8 +109,15 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
                     were_errors = True
                     msg = "Invalid log content detected. Reset to unprocessed."
                     tqdm.write(msg)
-                    db.reset_log_content(cursor, log_id)
+                    invalid_ids.append(log_id)
 
                     progress.update(1)
+
+                # Finish reads before starting the batch's writes.
+                # An interrupted batch leaves its contents unchanged.
+                conn.commit()
+                for log_id in invalid_ids:
+                    db.reset_log_content(cursor, log_id)
+                conn.commit()
 
     return (were_errors, num_valid_logs, num_ids)

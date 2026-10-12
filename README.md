@@ -172,6 +172,18 @@ Validate that all downloaded mjlog XML in the database can be parsed correctly.
 If an invalid or unreadable log is found, this command resets that log entry to the undownloaded state.
 This allows a later `download` run to fetch it again.
 
+Validation runs in batches of up to 1,000 processed entries, ordered by log ID.
+Each batch is fully checked before its invalid entries are reset in one
+transaction and committed, including the final partial batch. No write
+transaction is held while checking log contents.
+If interrupted (for example, with Ctrl+C) or stopped by an unexpected exception,
+resets from previously committed batches remain saved. The current batch's
+resets are discarded unless its commit has completed; entries in later batches
+remain unchanged. Valid entries retain their original contents and flags.
+Running `validate` again checks all remaining processed entries from the start;
+validation progress is not stored. Avoid modifying the database with other
+commands during validation.
+
 ```sh
 houou-logs validate <db-path>
 ```
