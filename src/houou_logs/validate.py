@@ -84,6 +84,8 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
     validate_db_path(db_path)
 
     with closing(db.open_db(db_path)) as conn, conn:
+        db.create_logs_indexes(conn)
+        conn.commit()
         cursor = conn.cursor()
 
         num_ids = db.count_all_ids(cursor)

@@ -48,6 +48,8 @@ def export(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with closing(db.open_db(db_path)) as conn, conn:
+        db.create_logs_indexes(conn)
+        conn.commit()
         cursor = conn.cursor()
 
         num_logs = db.count_log_contents(

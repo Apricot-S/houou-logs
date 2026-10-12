@@ -33,7 +33,7 @@ def setup_table(conn: sqlite3.Connection) -> None:
         create_fetch_state_table(conn)
         migrate_last_fetch_time_to_fetch_state(conn)
         create_file_index_table(conn)
-        create_logs_status_filter_index(conn)
+        create_logs_indexes(conn)
 
 
 def create_logs_table(conn: sqlite3.Connection) -> None:
@@ -110,6 +110,16 @@ def create_logs_status_filter_index(conn: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_logs_status_filter
         ON logs (is_processed, was_error, num_players, is_tonpu, id);
+        """,
+    )
+
+
+def create_logs_indexes(conn: sqlite3.Connection) -> None:
+    create_logs_status_filter_index(conn)
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_logs_status_id
+        ON logs (is_processed, was_error, id, num_players, is_tonpu);
         """,
     )
 

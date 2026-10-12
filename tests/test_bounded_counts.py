@@ -11,13 +11,15 @@ import pytest
 from houou_logs import db
 
 
-@pytest.fixture(params=[False, True], ids=["legacy", "indexed"])
+@pytest.fixture(params=[0, 1, 2], ids=["legacy", "indexed", "two_indexes"])
 def count_db(request: pytest.FixtureRequest) -> Generator[sqlite3.Connection]:
     conn = db.open_db(":memory:")
     try:
         db.create_logs_table(conn)
         if request.param:
             db.create_logs_status_filter_index(conn)
+        if request.param == 2:
+            db.create_logs_indexes(conn)
         entries = (
             db.LogEntry(
                 id=f"{i:08d}",

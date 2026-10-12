@@ -143,6 +143,8 @@ def download(
 
     num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:
+        db.create_logs_indexes(conn)
+        conn.commit()
         cursor = conn.cursor()
 
         with create_session() as session:
