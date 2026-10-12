@@ -267,38 +267,6 @@ def count_all_log_contents(cursor: sqlite3.Cursor) -> int:
     return cursor.fetchone()[0]
 
 
-def list_all_processed_log_ids_after(
-    cursor: sqlite3.Cursor,
-    after_id: str | None,
-    limit: int,
-) -> list[str]:
-    if after_id is None:
-        cursor.execute(
-            """
-            SELECT id
-            FROM logs
-            WHERE is_processed = 1
-            ORDER BY id ASC
-            LIMIT ?;
-            """,
-            (limit,),
-        )
-    else:
-        cursor.execute(
-            """
-            SELECT id
-            FROM logs
-            WHERE is_processed = 1
-                AND id > ?
-            ORDER BY id ASC
-            LIMIT ?;
-            """,
-            (after_id, limit),
-        )
-
-    return [row[0] for row in cursor.fetchall()]
-
-
 def iter_processed_log_contents_after(
     cursor: sqlite3.Cursor,
     after_id: str | None,
