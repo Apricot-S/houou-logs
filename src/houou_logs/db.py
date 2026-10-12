@@ -405,13 +405,13 @@ def count_all_ids(cursor: sqlite3.Cursor) -> int:
     return cursor.fetchone()[0]
 
 
-def reset_log_content(cursor: sqlite3.Cursor, log_id: str) -> None:
-    cursor.execute(
+def reset_log_contents(cursor: sqlite3.Cursor, log_ids: Iterable[str]) -> None:
+    cursor.executemany(
         """
         UPDATE logs SET is_processed = 0, was_error = 0, log = NULL
         WHERE id = ?;
         """,
-        (log_id,),
+        ((log_id,) for log_id in log_ids),
     )
 
 
