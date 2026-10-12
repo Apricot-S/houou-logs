@@ -116,8 +116,7 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
                 # Finish reads before starting the batch's writes.
                 # An interrupted batch leaves its contents unchanged.
                 conn.commit()
-                for log_id in invalid_ids:
-                    db.reset_log_content(cursor, log_id)
+                db.reset_log_contents(cursor, invalid_ids)
                 conn.commit()
 
     return (were_errors, num_valid_logs, num_ids)

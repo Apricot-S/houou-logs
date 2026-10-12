@@ -4,6 +4,7 @@
 
 import gzip
 import sqlite3
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from unittest.mock import patch
 
@@ -233,7 +234,7 @@ def test_validate_interrupted_batch_preserves_committed_batches(
 
     monkeypatch.setattr(validate_module, "VALIDATE_BATCH_SIZE", 2)
     original_validate = validate_module.is_valid_log_content
-    original_reset = db.reset_log_content
+    original_reset = db.reset_log_contents
 
     def check_content(log_id: str, content: bytes | None) -> bool:
         # Checking a batch must not hold a write lock.
@@ -245,13 +246,21 @@ def test_validate_interrupted_batch_preserves_committed_batches(
             raise error_type
         return original_validate(log_id, content)
 
-    def reset_content(cursor: sqlite3.Cursor, log_id: str) -> None:
-        original_reset(cursor, log_id)
-        if stage == "reset" and log_id == log_ids[2]:
-            raise error_type
+    def reset_contents(
+        cursor: sqlite3.Cursor,
+        batch_ids: Iterable[str],
+    ) -> None:
+        def interrupted_ids() -> Iterator[str]:
+            for log_id in batch_ids:
+                yield log_id
+                # Fail after executemany updates the first entry.
+                if stage == "reset" and log_id == log_ids[2]:
+                    raise error_type
+
+        original_reset(cursor, interrupted_ids())
 
     monkeypatch.setattr(validate_module, "is_valid_log_content", check_content)
-    monkeypatch.setattr(db, "reset_log_content", reset_content)
+    monkeypatch.setattr(db, "reset_log_contents", reset_contents)
     with pytest.raises(error_type):
         validate_module.validate(db_path)
 
@@ -268,7 +277,7 @@ def test_validate_interrupted_batch_preserves_committed_batches(
         "is_valid_log_content",
         original_validate,
     )
-    monkeypatch.setattr(db, "reset_log_content", original_reset)
+    monkeypatch.setattr(db, "reset_log_contents", original_reset)
     assert validate_module.validate(db_path) == (True, 2, 6)
     with db.open_db(db_path) as conn:
         rows = conn.execute(
