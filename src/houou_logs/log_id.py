@@ -59,26 +59,54 @@ def parse_id(time: str, log_id: str) -> LogEntry:
     )
 
 
-def iter_log_entries(filename: str, fileobj: IO[bytes]) -> Iterator[LogEntry]:
-    """Read lines without closing the caller's file object."""
+def iter_log_entries(
+    filename: str,
+    fileobj: IO[bytes],
+    *,
+    validate_body: bool = False,
+) -> Iterator[LogEntry]:
+    """Read lines, optionally validating rows and IDs.
+
+    Empty bodies and blank lines represent valid empty lists.
+    Keep the caller's file open. Archive imports retain lenient parsing.
+    """
     if filename.endswith(".html.gz"):
         # Logs from 2013 onwards are compressed
         with gzip.open(fileobj, mode="rb") as gz:
-            yield from _iter_log_entries(filename, gz)
+            yield from _iter_log_entries(
+                filename,
+                gz,
+                validate_body=validate_body,
+            )
     else:
-        yield from _iter_log_entries(filename, fileobj)
+        yield from _iter_log_entries(
+            filename,
+            fileobj,
+            validate_body=validate_body,
+        )
 
 
 def _iter_log_entries(
     filename: str,
     lines: Iterable[bytes],
+    *,
+    validate_body: bool = False,
 ) -> Iterator[LogEntry]:
     for line in lines:
-        for match in LINE_PATTERN.finditer(line.decode("utf-8")):
+        text = line.decode("utf-8")
+        matched = False
+        for match in LINE_PATTERN.finditer(text):
+            matched = True
             time, log_id = match.groups()
             try:
                 entry = parse_id(time, log_id)
             except ExternalResponseParseError as e:
+                if validate_body:
+                    raise
                 tqdm.write(f"{filename}: {e}")
             else:
                 yield entry
+
+        if validate_body and text.strip() and not matched:
+            msg = f"{filename}: failed to parse log list row"
+            raise ExternalResponseParseError(msg)

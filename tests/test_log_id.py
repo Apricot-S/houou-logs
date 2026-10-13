@@ -26,6 +26,48 @@ MOCK_LOG = """
 """  # noqa: E501
 
 
+@pytest.mark.parametrize("compressed", [False, True])
+@pytest.mark.parametrize("content", [b"", b"\r\n \t\r\n"])
+def test_validated_list_accepts_empty_body(
+    content: bytes,
+    *,
+    compressed: bool,
+) -> None:
+    filename = "scc.html.gz" if compressed else "scc.html"
+    with io.BytesIO(
+        gzip.compress(content) if compressed else content,
+    ) as source:
+        assert (
+            list(iter_log_entries(filename, source, validate_body=True)) == []
+        )
+        assert not source.closed
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"<html>Service unavailable</html>",
+        b"Service unavailable",
+        b"00:00 | missing log link<br>",
+        b'00:00 log=invalid">',
+    ],
+)
+def test_validated_list_rejects_invalid_body(
+    content: bytes,
+    *,
+    compressed: bool,
+) -> None:
+    filename = "scc.html.gz" if compressed else "scc.html"
+    with (
+        io.BytesIO(
+            gzip.compress(content) if compressed else content,
+        ) as source,
+        pytest.raises(ExternalResponseParseError),
+    ):
+        list(iter_log_entries(filename, source, validate_body=True))
+
+
 def test_parse_date() -> None:
     assert parse_date("00:05", "2024010100") == "2024-01-01T00:05"
 

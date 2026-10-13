@@ -4,11 +4,13 @@
 
 import io
 import re
+import zlib
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import niquests
+from niquests.exceptions import RequestException
 from tqdm import tqdm
 
 from houou_logs import db
@@ -133,14 +135,30 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
 
             for filename, size in tqdm(changed_files.items()):
                 url = f"{LOG_DOWNLOAD_URL}{filename}"
-                content = fetch_log_file_content(session, url)
+                try:
+                    content = fetch_log_file_content(session, url)
 
-                with io.BytesIO(content) as f:
-                    entries = iter_log_entries(filename, f)
-                    num_logs += db.insert_log_entries(cursor, entries)
+                    with io.BytesIO(content) as f:
+                        entries = iter_log_entries(
+                            filename,
+                            f,
+                            validate_body=True,
+                        )
+                        inserted = db.insert_log_entries(cursor, entries)
+                except (
+                    RequestException,
+                    ExternalResponseParseError,
+                    UnicodeDecodeError,
+                    OSError,
+                    EOFError,
+                    zlib.error,
+                ) as e:
+                    conn.rollback()
+                    tqdm.write(f"{filename}: {e}")
+                    continue
 
                 db.insert_file_index(cursor, filename, size)
-
                 conn.commit()
+                num_logs += inserted
 
     return num_logs

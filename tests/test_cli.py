@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
+import gzip
 from argparse import ArgumentParser, Namespace
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
@@ -611,7 +612,15 @@ def test_main_fetch_rejects_invalid_index_before_downloading(
         conn.close()
 
 
-@pytest.mark.parametrize("content", [None, b"\xff", b"not gzip"])
+@pytest.mark.parametrize(
+    "content",
+    [
+        None,
+        b"\xff",
+        b"not gzip",
+        gzip.compress(b"<html>Service unavailable</html>"),
+    ],
+)
 def test_main_fetch_handles_invalid_file_response(
     db_path: Path,
     capsys: pytest.CaptureFixture,
@@ -631,10 +640,11 @@ def test_main_fetch_handles_invalid_file_response(
         create_session.return_value.__enter__.return_value.get.return_value = (
             response
         )
-        assert main(["fetch", str(db_path)]) == IO_ERROR_EXIT_CODE
+        assert main(["fetch", str(db_path)]) == SUCCESS_EXIT_CODE
     captured = capsys.readouterr()
     assert "Traceback" not in captured.out + captured.err
-    assert "Number of log entries inserted" not in captured.err
+    assert filename in captured.out
+    assert "Number of log entries inserted into the DB: 0" in captured.err
     conn = db.open_db(db_path)
     try:
         assert db.count_all_ids(conn.cursor()) == 0
