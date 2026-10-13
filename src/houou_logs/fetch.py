@@ -112,7 +112,6 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
 
 def fetch(db_path: str | Path, *, archive: bool) -> int:
     num_logs = 0
-    first_file_error: Exception | None = None
     with closing(db.open_db(db_path)) as conn, conn:
         db.setup_table(conn)
         cursor = conn.cursor()
@@ -156,16 +155,10 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 ) as e:
                     conn.rollback()
                     tqdm.write(f"{filename}: {e}")
-                    if first_file_error is None:
-                        first_file_error = e
                     continue
 
                 db.insert_file_index(cursor, filename, size)
                 conn.commit()
                 num_logs += inserted
-
-            # Report failure only after committing all successful files.
-            if first_file_error is not None:
-                raise first_file_error
 
     return num_logs

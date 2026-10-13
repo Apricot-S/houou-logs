@@ -87,16 +87,7 @@ def test_fetch_continues_after_file_errors_and_retries_only_failed_files(
     finally:
         conn.close()
 
-    with pytest.raises(
-        (
-            ExternalResponseParseError,
-            UnicodeDecodeError,
-            OSError,
-            EOFError,
-            HTTPError,
-        ),
-    ):
-        fetch_module.fetch(path, archive=False)
+    assert fetch_module.fetch(path, archive=False) == 2
     assert body_fetch.call_count == 4
     output = capsys.readouterr().out
     assert filenames[1] in output
@@ -531,17 +522,11 @@ def test_fetch_file_is_atomic(
                 side_effect=sqlite3.OperationalError("index failure"),
             ),
         )
-    if failure:
-        with pytest.raises(
-            (
-                UnicodeDecodeError,
-                sqlite3.DatabaseError,
-                ExternalResponseParseError,
-            ),
-        ):
+    if failure in ("database", "index"):
+        with pytest.raises(sqlite3.DatabaseError):
             fetch_module.fetch(path, archive=False)
     else:
-        assert fetch_module.fetch(path, archive=False) == 1
+        assert fetch_module.fetch(path, archive=False) == (0 if failure else 1)
     if not failure:
         start = next(
             i for i, sql in enumerate(statements) if "INSERT INTO logs" in sql
@@ -631,11 +616,7 @@ def test_fetch_retries_invalid_body_with_unchanged_file_index(
         ],
     )
     monkeypatch.setattr(fetch_module, "fetch_log_file_content", body_fetch)
-    with pytest.raises(
-        ExternalResponseParseError,
-        match="failed to parse log list",
-    ):
-        fetch_module.fetch(path, archive=False)
+    assert fetch_module.fetch(path, archive=False) == 0
     conn = db.open_db(path)
     try:
         assert conn.execute("SELECT * FROM file_index").fetchall() == []
