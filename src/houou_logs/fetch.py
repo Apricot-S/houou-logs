@@ -136,7 +136,7 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
                 content = fetch_log_file_content(session, url)
 
                 with io.BytesIO(content) as f:
-                    entries = iter_log_entries(filename, f)
+                    entries = iter_log_entries(filename, f, validate_body=True)
                     num_logs += db.insert_log_entries(cursor, entries)
 
                 db.insert_file_index(cursor, filename, size)

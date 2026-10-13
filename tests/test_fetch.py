@@ -3,9 +3,10 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
+import io
 import sqlite3
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -23,6 +24,7 @@ from houou_logs.fetch import (
     parse_file_index,
     should_fetch,
 )
+from houou_logs.log_id import iter_log_entries
 
 
 @pytest.mark.parametrize(
@@ -355,7 +357,10 @@ def test_fetch_updates_attempt_time_before_file_index_request(
 
 
 @pytest.mark.parametrize("compressed", [False, True])
-@pytest.mark.parametrize("failure", [None, "decode", "database", "index"])
+@pytest.mark.parametrize(
+    "failure",
+    [None, "decode", "body", "invalid_id", "database", "index"],
+)
 def test_fetch_file_is_atomic(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -368,6 +373,10 @@ def test_fetch_file_is_atomic(
     content = b'00:00 log=2009020100gm-00a9-0000-00000000">\n' * 2
     if failure == "decode":
         content += b"\xff\n"
+    if failure == "body":
+        content += b"<html>Service unavailable</html>\n"
+    if failure == "invalid_id":
+        content += b'00:01 log=invalid">\n'
     if compressed:
         content = gzip.compress(content)
     monkeypatch.setattr(
@@ -411,7 +420,13 @@ def test_fetch_file_is_atomic(
             ),
         )
     if failure:
-        with pytest.raises((UnicodeDecodeError, sqlite3.DatabaseError)):
+        with pytest.raises(
+            (
+                UnicodeDecodeError,
+                sqlite3.DatabaseError,
+                ExternalResponseParseError,
+            ),
+        ):
             fetch_module.fetch(path, archive=False)
     else:
         assert fetch_module.fetch(path, archive=False) == 1
@@ -435,5 +450,103 @@ def test_fetch_file_is_atomic(
         assert conn.execute(
             "SELECT file, size FROM file_index",
         ).fetchall() == ([] if failure else [(filename, 100)])
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [b"", b"\r\n \t\n", b'00:00 log=2009020100gm-00a9-0000-00000000">\n'],
+)
+def test_fetch_records_valid_list_with_no_new_ids(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    content: bytes,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filename = "scc20250101.html.gz"
+    conn = db.open_db(path)
+    try:
+        db.setup_table(conn)
+        with io.BytesIO(
+            b'00:00 log=2009020100gm-00a9-0000-00000000">',
+        ) as source:
+            db.insert_log_entries(
+                conn.cursor(),
+                iter_log_entries("scc.html", source),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(return_value=f"list([{{file:'{filename}',size:123}}]);"),
+    )
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_log_file_content",
+        Mock(return_value=gzip.compress(content)),
+    )
+    assert fetch_module.fetch(path, archive=False) == 0
+    conn = db.open_db(path)
+    try:
+        assert conn.execute(
+            "SELECT file, size FROM file_index",
+        ).fetchall() == [
+            (filename, 123),
+        ]
+        assert db.count_all_ids(conn.cursor()) == 1
+    finally:
+        conn.close()
+
+
+def test_fetch_retries_invalid_body_with_unchanged_file_index(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filename = "scc20250101.html.gz"
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(return_value=f"list([{{file:'{filename}',size:123}}]);"),
+    )
+    body_fetch = Mock(
+        side_effect=[
+            gzip.compress(b"<html>Service unavailable</html>"),
+            gzip.compress(b'00:00 log=2009020100gm-00a9-0000-00000000">\n'),
+        ],
+    )
+    monkeypatch.setattr(fetch_module, "fetch_log_file_content", body_fetch)
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse log list",
+    ):
+        fetch_module.fetch(path, archive=False)
+    conn = db.open_db(path)
+    try:
+        assert conn.execute("SELECT * FROM file_index").fetchall() == []
+        assert db.count_all_ids(conn.cursor()) == 0
+        db.update_fetch_attempt_time(
+            conn.cursor(),
+            fetch_module.FETCH_KIND_LATEST,
+            datetime.now(UTC)
+            - fetch_module.MIN_FETCH_INTERVAL
+            - timedelta(seconds=1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert fetch_module.fetch(path, archive=False) == 1
+    assert body_fetch.call_count == 2
+    conn = db.open_db(path)
+    try:
+        assert conn.execute(
+            "SELECT file, size FROM file_index",
+        ).fetchall() == [
+            (filename, 123),
+        ]
+        assert db.count_all_ids(conn.cursor()) == 1
     finally:
         conn.close()
