@@ -12,7 +12,7 @@ import pytest
 from houou_logs import db
 from houou_logs import yakuman as yakuman_module
 from houou_logs.db import LogEntry
-from houou_logs.exceptions import UserInputError
+from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 from houou_logs.yakuman import (
     build_url,
     iter_entries,
@@ -119,7 +119,7 @@ updated="2025/02/01 00:12";
 sw();
 """  # noqa: E501
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ExternalResponseParseError):
         list(iter_ids(text))
 
 
@@ -130,7 +130,10 @@ ykm=[foo];
 sw();
 """
 
-    with pytest.raises(RuntimeError, match="failed to parse ykm array"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse ykm array",
+    ):
         list(iter_ids(text))
 
 
@@ -141,7 +144,10 @@ ykm=['01/31 23:57','etra'];
 sw();
 """
 
-    with pytest.raises(RuntimeError, match="invalid new ykm array length"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="invalid new ykm array length",
+    ):
         list(iter_ids(text))
 
 
@@ -152,7 +158,10 @@ ykm=['01/31 23:57','etra','[1]',[39],123];
 sw();
 """
 
-    with pytest.raises(TypeError, match="invalid new ykm array entry"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="invalid new ykm array entry",
+    ):
         list(iter_ids(text))
 
 
@@ -180,7 +189,7 @@ sw();
     assert list(iter_ids(text)) == ids
 
 
-def test_iter_ids_old_format_skips_invalid_entry() -> None:
+def test_iter_ids_old_format_rejects_invalid_entry() -> None:
     text = """total=451693;
 updated="2008/02/01 01:17";
 ykm=[
@@ -190,9 +199,8 @@ ykm=[
 sw();
 """  # noqa: E501
 
-    assert list(iter_ids(text)) == [
-        ("01/31 23:52", "2008013123gm-0009-0000-5ab263c2"),
-    ]
+    with pytest.raises(ExternalResponseParseError, match="invalid old ykm"):
+        list(iter_ids(text))
 
 
 def test_parse_id_new_format() -> None:
@@ -249,12 +257,18 @@ def test_parse_id_accepts_legacy_yakuman_log_id_without_hour() -> None:
 
 
 def test_parse_id_rejects_invalid_yakuman_log_id() -> None:
-    with pytest.raises(ValueError, match="invalid yakuman log ID: invalid"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="invalid yakuman log ID: invalid",
+    ):
         parse_id(2007, "04/16 08:15", "invalid")
 
 
 def test_parse_id_rejects_invalid_yakuman_log_date() -> None:
-    with pytest.raises(ValueError, match="invalid yakuman log date: invalid"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="invalid yakuman log date: invalid",
+    ):
         parse_id(2007, "invalid", "2007041610gm-00c1-0000-75574173")
 
 
@@ -264,18 +278,8 @@ def test_iter_entries_skips_invalid_yakuman_log_id() -> None:
         ("04/16 10:27", "2007041610gm-00c1-0000-75574173"),
     ]
 
-    entries = list(iter_entries(2007, iter(ids)))
-
-    assert entries == [
-        LogEntry(
-            "2007041610gm-00c1-0000-75574173",
-            "2007-04-16T10:27",
-            4,
-            is_tonpu=True,
-            is_processed=False,
-            was_error=False,
-            log=None,
-        ),
+    assert list(iter_entries(2007, iter(ids))) == [
+        parse_id(2007, "04/16 10:27", "2007041610gm-00c1-0000-75574173"),
     ]
 
 
@@ -318,7 +322,10 @@ def test_yakuman_iterator_transaction(
     assert next(ids) == ("01/01 00:00", new_id)
     now = datetime(2025, 2, 1, tzinfo=UTC)
     if failure:
-        with pytest.raises(TypeError, match="invalid new ykm array entry"):
+        with pytest.raises(
+            ExternalResponseParseError,
+            match="invalid new ykm array entry",
+        ):
             yakuman_module.yakuman(path, 2025, 1, now)
     else:
         assert yakuman_module.yakuman(path, 2025, 1, now) == 1

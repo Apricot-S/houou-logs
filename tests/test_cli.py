@@ -9,7 +9,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+from niquests import Response
 
+from houou_logs import db
 from houou_logs.cli import (
     INTERRUPTED_EXIT_CODE,
     IO_ERROR_EXIT_CODE,
@@ -372,3 +374,291 @@ def test_main_returns_interrupted_code_without_traceback(
     captured = capsys.readouterr()
     assert captured.err == "Interrupted by user.\n"
     assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("archive", [False, True])
+def test_main_fetch_parse_error_preserves_attempt_time(
+    db_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    *,
+    archive: bool,
+) -> None:
+    now = datetime(2025, 9, 20, 11, tzinfo=UTC)
+    mock_datetime = Mock(wraps=datetime)
+    mock_datetime.now.return_value = now
+    monkeypatch.setattr("houou_logs.fetch.datetime", mock_datetime)
+    with (
+        patch("houou_logs.fetch.create_session"),
+        patch(
+            "houou_logs.fetch.fetch_file_index_text",
+            return_value="<html>Service unavailable</html>",
+        ),
+    ):
+        argv = ["fetch", str(db_path)]
+        if archive:
+            argv.append("--archive")
+        assert main(argv) == IO_ERROR_EXIT_CODE
+
+    captured = capsys.readouterr()
+    assert captured.err == "Response parse error: failed to parse file index\n"
+    assert "Traceback" not in captured.out + captured.err
+    conn = db.open_db(db_path)
+    try:
+        kind = "archive" if archive else "latest"
+        assert db.get_fetch_attempt_time(conn.cursor(), kind) == now
+        assert db.count_all_ids(conn.cursor()) == 0
+        assert conn.execute("SELECT * FROM file_index").fetchall() == []
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("<html>Service unavailable</html>", "ykm array not found"),
+        ("ykm=[foo];", "failed to parse ykm array"),
+        ("ykm=['date' 'name',,];", "failed to parse ykm array"),
+        ("ykm=['date'];", "invalid new ykm array length"),
+        (
+            "ykm=['date', 'name', 'data', [], 123];",
+            "invalid new ykm array entry",
+        ),
+        ("ykm=[123];", "unsupported ykm array format"),
+        (
+            (
+                "ykm=[['01/01 00:00', 'name', 'data', [], "
+                "'2025010100gm-00a9-0000-00000000'], []];"
+            ),
+            "invalid old ykm array entry",
+        ),
+        (
+            (
+                "ykm=[['01/01 00:00', 'name', 'data', [], "
+                "'2025010100gm-00a9-0000-00000000'], "
+                "['01/01 01:00', 'name', 'data', [], 123]];"
+            ),
+            "invalid old ykm array entry",
+        ),
+        (
+            (
+                "ykm=['01/01 00:00', 'name', 'data', [], "
+                "'2025010100gm-00a9-0000-00000000', "
+                "'01/01 01:00', 'name', 'data', [], 123];"
+            ),
+            "invalid new ykm array entry",
+        ),
+    ],
+)
+def test_main_yakuman_parse_error_rolls_back(
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+    text: str,
+    message: str,
+) -> None:
+    with (
+        patch("houou_logs.yakuman.create_session"),
+        patch(
+            "houou_logs.yakuman.fetch_yakuman_log_ids_text",
+            return_value=text,
+        ),
+    ):
+        assert (
+            main(["yakuman", str(db_path), "2025", "1"]) == IO_ERROR_EXIT_CODE
+        )
+
+    captured = capsys.readouterr()
+    assert "Response parse error:" in captured.err
+    assert message in captured.err
+    assert "Traceback" not in captured.out + captured.err
+    conn = db.open_db(db_path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
+@pytest.mark.parametrize("command", ["fetch", "yakuman"])
+def test_main_propagates_unexpected_parser_bugs(
+    db_path: Path,
+    command: str,
+    error_type: type[Exception],
+) -> None:
+    if command == "fetch":
+        response_function = "fetch_file_index_text"
+        parser_function = "parse_file_index"
+        argv = [command, str(db_path)]
+    else:
+        response_function = "fetch_yakuman_log_ids_text"
+        parser_function = "iter_ids"
+        argv = [command, str(db_path), "2025", "1"]
+    with (
+        patch(f"houou_logs.{command}.create_session"),
+        patch(f"houou_logs.{command}.{response_function}", return_value=""),
+        patch(
+            f"houou_logs.{command}.{parser_function}",
+            side_effect=error_type("unexpected bug"),
+        ),
+        pytest.raises(error_type, match="unexpected bug"),
+    ):
+        main(argv)
+
+
+@pytest.mark.parametrize("error_type", [ValueError, RuntimeError, TypeError])
+def test_main_yakuman_propagates_unexpected_parse_id_bug(
+    db_path: Path,
+    error_type: type[Exception],
+) -> None:
+    text = (
+        "ykm=['01/01 00:00', 'name', 'data', [], "
+        "'2025010100gm-00a9-0000-00000000'];"
+    )
+    with (
+        patch("houou_logs.yakuman.create_session"),
+        patch(
+            "houou_logs.yakuman.fetch_yakuman_log_ids_text",
+            return_value=text,
+        ),
+        patch("houou_logs.yakuman.parse_type", side_effect=error_type("bug")),
+        pytest.raises(error_type, match="bug"),
+    ):
+        main(["yakuman", str(db_path), "2025", "1"])
+
+
+@pytest.mark.parametrize("old_format", [False, True])
+@pytest.mark.parametrize("invalid_field", ["date", "id"])
+def test_main_yakuman_skips_invalid_log_and_commits_valid_logs(
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+    invalid_field: str,
+    *,
+    old_format: bool,
+) -> None:
+    first_id = "2025010100gm-00a9-0000-00000000"
+    last_id = "2025010102gm-00a9-0000-00000000"
+    records = [
+        ["01/01 00:00", "name", "data", [], first_id],
+        [
+            "invalid" if invalid_field == "date" else "01/01 01:00",
+            "name",
+            "data",
+            [],
+            "invalid"
+            if invalid_field == "id"
+            else "2025010101gm-00a9-0000-00000000",
+        ],
+        ["01/01 02:00", "name", "data", [], last_id],
+    ]
+    array = (
+        records
+        if old_format
+        else [item for record in records for item in record]
+    )
+    with (
+        patch("houou_logs.yakuman.create_session"),
+        patch(
+            "houou_logs.yakuman.fetch_yakuman_log_ids_text",
+            return_value=f"ykm={array!r};",
+        ),
+    ):
+        assert (
+            main(["yakuman", str(db_path), "2025", "1"]) == SUCCESS_EXIT_CODE
+        )
+    captured = capsys.readouterr()
+    field_label = "ID" if invalid_field == "id" else "date"
+    assert f"invalid yakuman log {field_label}: invalid" in captured.out
+    assert "Number of log entries inserted into the DB: 2" in captured.err
+    assert "Response parse error:" not in captured.err
+    conn = db.open_db(db_path)
+    try:
+        assert {row[0] for row in conn.execute("SELECT id FROM logs")} == {
+            first_id,
+            last_id,
+        }
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "list([{file:'scc.html',size:100}, garbage]);",
+        f"list([{{file:'scc.html',size:{2**63}}}]);",
+    ],
+)
+def test_main_fetch_rejects_invalid_index_before_downloading(
+    db_path: Path,
+    text: str,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    with (
+        patch("houou_logs.fetch.create_session"),
+        patch("houou_logs.fetch.fetch_file_index_text", return_value=text),
+        patch("houou_logs.fetch.fetch_log_file_content") as fetch_content,
+    ):
+        assert main(["fetch", str(db_path)]) == IO_ERROR_EXIT_CODE
+        fetch_content.assert_not_called()
+    captured = capsys.readouterr()
+    assert "Response parse error:" in captured.err
+    assert "Traceback" not in captured.out + captured.err
+    conn = db.open_db(db_path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 0
+        assert conn.execute("SELECT * FROM file_index").fetchall() == []
+        assert db.get_fetch_attempt_time(conn.cursor(), "latest").year > 1970
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("content", [None, b"\xff", b"not gzip"])
+def test_main_fetch_handles_invalid_file_response(
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+    content: bytes | None,
+) -> None:
+    response = Mock(spec_set=Response)
+    response.content = content
+    response.raise_for_status.return_value = None
+    filename = "scc.html" if content == b"\xff" else "scc.html.gz"
+    with (
+        patch("houou_logs.fetch.create_session") as create_session,
+        patch(
+            "houou_logs.fetch.fetch_file_index_text",
+            return_value=f"list([{{file:'{filename}',size:100}}]);",
+        ),
+    ):
+        create_session.return_value.__enter__.return_value.get.return_value = (
+            response
+        )
+        assert main(["fetch", str(db_path)]) == IO_ERROR_EXIT_CODE
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out + captured.err
+    assert "Number of log entries inserted" not in captured.err
+    conn = db.open_db(db_path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 0
+        assert conn.execute("SELECT * FROM file_index").fetchall() == []
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("content", [None, b"\xff"])
+def test_main_yakuman_handles_invalid_response_encoding(
+    db_path: Path,
+    content: bytes | None,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    response = Mock(spec_set=Response)
+    response.content = content
+    response.raise_for_status.return_value = None
+    with patch("houou_logs.yakuman.create_session") as create_session:
+        create_session.return_value.__enter__.return_value.get.return_value = (
+            response
+        )
+        assert (
+            main(["yakuman", str(db_path), "2025", "1"]) == IO_ERROR_EXIT_CODE
+        )
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out + captured.err
+    assert "Number of log entries inserted" not in captured.err

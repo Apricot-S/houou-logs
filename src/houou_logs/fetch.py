@@ -12,6 +12,7 @@ import niquests
 from tqdm import tqdm
 
 from houou_logs import db
+from houou_logs.exceptions import ExternalResponseParseError
 from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, iter_log_entries
 from houou_logs.session import TIMEOUT, create_session
 
@@ -24,7 +25,15 @@ INDEX_URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
 LOG_DOWNLOAD_URL = "https://tenhou.net/sc/raw/dat/"
 
 FILE_INDEX_ENTRY_PATTERN = re.compile(
-    r"file\s*:\s*'([^']+)'\s*,\s*size\s*:\s*(\d+)",
+    r"\{\s*file\s*:\s*'([^']+)'\s*,\s*size\s*:\s*([0-9]+)\s*\}",
+)
+FILE_INDEX_ARRAY_PATTERN = re.compile(
+    r"\s*list\s*\(\s*\[(.*?)\]\s*\)\s*;\s*",
+    re.DOTALL,
+)
+FILE_INDEX_ENTRIES_PATTERN = re.compile(
+    rf"\s*{FILE_INDEX_ENTRY_PATTERN.pattern}"
+    rf"(?:\s*,\s*{FILE_INDEX_ENTRY_PATTERN.pattern})*\s*,?\s*",
 )
 EMPTY_FILE_INDEX_PATTERN = re.compile(
     r"^\s*list\s*\(\s*(?:\[\s*\])?\s*\)\s*;\s*$",
@@ -49,7 +58,7 @@ def fetch_file_index_text(session: niquests.Session, url: str) -> str:
     text = res.text
     if text is None:
         msg = "response text is None"
-        raise RuntimeError(msg)
+        raise ExternalResponseParseError(msg)
 
     return text
 
@@ -61,21 +70,34 @@ def fetch_log_file_content(session: niquests.Session, url: str) -> bytes:
     content = res.content
     if content is None:
         msg = "response content is None"
-        raise RuntimeError(msg)
+        raise ExternalResponseParseError(msg)
 
     return content
 
 
 def parse_file_index(response: str) -> dict[str, int]:
-    matches = FILE_INDEX_ENTRY_PATTERN.findall(response)
-    if matches:
-        return {path: int(size) for path, size in matches}
-
     if EMPTY_FILE_INDEX_PATTERN.fullmatch(response):
         return {}
 
-    msg = "failed to parse file index"
-    raise RuntimeError(msg)
+    array = FILE_INDEX_ARRAY_PATTERN.fullmatch(response)
+    if array is None or not FILE_INDEX_ENTRIES_PATTERN.fullmatch(array[1]):
+        msg = "failed to parse file index"
+        raise ExternalResponseParseError(msg)
+
+    matches = FILE_INDEX_ENTRY_PATTERN.findall(array[1])
+    try:
+        file_index = {path: int(size) for path, size in matches}
+    except ValueError as e:
+        msg = "file index size exceeds the integer parsing limit"
+        raise ExternalResponseParseError(msg) from e
+    # Sizes are stored in positive SQLite signed 64-bit INTEGER columns.
+    if any(size <= 0 for size in file_index.values()):
+        msg = "file index size must be positive"
+        raise ExternalResponseParseError(msg)
+    if any(size > 2**63 - 1 for size in file_index.values()):
+        msg = "file index size exceeds the supported range"
+        raise ExternalResponseParseError(msg)
+    return file_index
 
 
 def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:

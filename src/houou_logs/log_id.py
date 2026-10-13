@@ -10,6 +10,7 @@ from typing import IO
 from tqdm import tqdm
 
 from houou_logs.db import LogEntry
+from houou_logs.exceptions import ExternalResponseParseError
 
 HOUOU_ARCHIVE_PREFIX = "scc"
 
@@ -42,7 +43,7 @@ def parse_type(log_type: str) -> tuple[int, bool]:
 def parse_id(time: str, log_id: str) -> LogEntry:
     if not LOG_ID_PATTERN.fullmatch(log_id):
         msg = f"invalid log ID: {log_id}"
-        raise ValueError(msg)
+        raise ExternalResponseParseError(msg)
 
     date = parse_date(time, log_id[0:8])
     num_players, is_tonpu = parse_type(log_id[13:17])
@@ -77,7 +78,7 @@ def _iter_log_entries(
             time, log_id = match.groups()
             try:
                 entry = parse_id(time, log_id)
-            except ValueError as e:
+            except ExternalResponseParseError as e:
                 tqdm.write(f"{filename}: {e}")
             else:
                 yield entry

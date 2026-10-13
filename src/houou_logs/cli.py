@@ -16,7 +16,7 @@ from pathlib import Path
 from niquests.exceptions import RequestException
 
 from houou_logs import download, export, fetch, import_, validate, yakuman
-from houou_logs.exceptions import UserInputError
+from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 
 SUCCESS_EXIT_CODE = 0
 IO_ERROR_EXIT_CODE = 1
@@ -302,6 +302,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except UserInputError as e:
         print(f"Error: {e}", file=sys.stderr)
         return USER_INPUT_ERROR_EXIT_CODE
+    except ExternalResponseParseError as e:
+        print(f"Response parse error: {e}", file=sys.stderr)
+        return IO_ERROR_EXIT_CODE
     except EXTERNAL_IO_ERRORS as e:
         print(format_external_io_error(e), file=sys.stderr)
         return IO_ERROR_EXIT_CODE
