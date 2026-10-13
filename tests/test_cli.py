@@ -3,7 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 from argparse import ArgumentParser, Namespace
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -13,6 +13,7 @@ import pytest
 from houou_logs.cli import (
     INTERRUPTED_EXIT_CODE,
     IO_ERROR_EXIT_CODE,
+    SUCCESS_EXIT_CODE,
     USER_INPUT_ERROR_EXIT_CODE,
     download_cli,
     export_cli,
@@ -224,19 +225,40 @@ def test_export_cli_calls_export(mock_export: Mock) -> None:
 
 
 def test_main_requires_subcommand(
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
-    monkeypatch.setattr("sys.argv", ["houou-logs"])
-
     with pytest.raises(SystemExit) as e:
-        main()
+        main([])
 
     assert e.value.code == USER_INPUT_ERROR_EXIT_CODE
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "usage:" in captured.err
     assert "required" in captured.err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["fetch", "db.sqlite"], ("fetch", "db.sqlite")],
+)
+@patch("houou_logs.fetch.fetch")
+def test_main_accepts_argument_sequence(
+    mock_fetch: Mock,
+    argv: Sequence[str],
+) -> None:
+    assert main(argv) == SUCCESS_EXIT_CODE
+    mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=False)
+
+
+@patch("houou_logs.fetch.fetch")
+def test_main_without_arguments_uses_sys_argv(
+    mock_fetch: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
+
+    assert main() == SUCCESS_EXIT_CODE
+    mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=False)
 
 
 @pytest.mark.parametrize("year", [-1, 0, 10000, 10001])
@@ -246,17 +268,13 @@ def test_main_rejects_invalid_yakuman_year_without_side_effects(
     mock_open_db: Mock,
     mock_create_session: Mock,
     year: int,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
     tmp_path: Path,
 ) -> None:
     db_path = tmp_path / "db.sqlite"
-    monkeypatch.setattr(
-        "sys.argv",
-        ["houou-logs", "yakuman", str(db_path), str(year), "1"],
+    assert main(["yakuman", str(db_path), str(year), "1"]) == (
+        USER_INPUT_ERROR_EXIT_CODE
     )
-
-    assert main() == USER_INPUT_ERROR_EXIT_CODE
 
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -269,31 +287,26 @@ def test_main_rejects_invalid_yakuman_year_without_side_effects(
 @patch("houou_logs.fetch.fetch")
 def test_main_returns_user_input_error_code(
     mock_fetch: Mock,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
     mock_fetch.side_effect = UserInputError("invalid option")
-    monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
-
-    assert main() == USER_INPUT_ERROR_EXIT_CODE
+    assert main(["fetch", "db.sqlite"]) == USER_INPUT_ERROR_EXIT_CODE
     assert capsys.readouterr().err == "Error: invalid option\n"
 
 
 @pytest.mark.parametrize("command", ["download", "export", "validate"])
 def test_main_rejects_missing_database(
     command: str,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
     tmp_path: Path,
 ) -> None:
     db_path = tmp_path / "missing.sqlite"
     output_dir = tmp_path / "xml"
-    argv = ["houou-logs", command, str(db_path)]
+    argv = [command, str(db_path)]
     if command == "export":
         argv.append(str(output_dir))
-    monkeypatch.setattr("sys.argv", argv)
 
-    assert main() == USER_INPUT_ERROR_EXIT_CODE
+    assert main(argv) == USER_INPUT_ERROR_EXIT_CODE
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == f"Error: database file is not found: {db_path}\n"
@@ -316,21 +329,19 @@ def test_main_rejects_invalid_common_options_before_database_access(
     option: str,
     value: str,
     message: str,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
     tmp_path: Path,
 ) -> None:
     db_path = tmp_path / "db.sqlite"
     db_path.touch()
     output_dir = tmp_path / "xml"
-    argv = ["houou-logs", command, str(db_path)]
+    argv = [command, str(db_path)]
     if command == "export":
         argv.append(str(output_dir))
     argv.extend([option, value])
-    monkeypatch.setattr("sys.argv", argv)
 
     with patch("houou_logs.db.open_db") as mock_open_db:
-        assert main() == USER_INPUT_ERROR_EXIT_CODE
+        assert main(argv) == USER_INPUT_ERROR_EXIT_CODE
         mock_open_db.assert_not_called()
 
     captured = capsys.readouterr()
@@ -342,13 +353,10 @@ def test_main_rejects_invalid_common_options_before_database_access(
 @patch("houou_logs.fetch.fetch")
 def test_main_returns_io_error_code_without_traceback(
     mock_fetch: Mock,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
     mock_fetch.side_effect = OSError("network is unreachable")
-    monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
-
-    assert main() == IO_ERROR_EXIT_CODE
+    assert main(["fetch", "db.sqlite"]) == IO_ERROR_EXIT_CODE
     captured = capsys.readouterr()
     assert captured.err == "I/O error: network is unreachable\n"
     assert "Traceback" not in captured.err
@@ -357,13 +365,10 @@ def test_main_returns_io_error_code_without_traceback(
 @patch("houou_logs.fetch.fetch")
 def test_main_returns_interrupted_code_without_traceback(
     mock_fetch: Mock,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
     mock_fetch.side_effect = KeyboardInterrupt
-    monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
-
-    assert main() == INTERRUPTED_EXIT_CODE
+    assert main(["fetch", "db.sqlite"]) == INTERRUPTED_EXIT_CODE
     captured = capsys.readouterr()
     assert captured.err == "Interrupted by user.\n"
     assert "Traceback" not in captured.err

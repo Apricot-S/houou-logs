@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 from argparse import ArgumentParser, Namespace
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from gzip import BadGzipFile
 from pathlib import Path
@@ -289,9 +290,9 @@ def build_parser() -> ArgumentParser:
     return parser
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         args.func(args)
