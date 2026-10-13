@@ -13,7 +13,7 @@ from niquests import Session
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.exceptions import UserInputError
+from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 from houou_logs.log_id import parse_type
 from houou_logs.session import TIMEOUT, create_session
 
@@ -57,7 +57,7 @@ def fetch_yakuman_log_ids_text(session: Session, url: str) -> str:
     content = res.content
     if content is None:
         msg = "response content is None"
-        raise RuntimeError(msg)
+        raise ExternalResponseParseError(msg)
 
     return content.decode("utf-8")
 
@@ -66,14 +66,14 @@ def iter_ids_from_new_format(ykm_array: list) -> Iterator[tuple[str, str]]:
     # New format: format from February 2008
     if len(ykm_array) % 5 != 0:
         msg = "invalid new ykm array length"
-        raise RuntimeError(msg)
+        raise ExternalResponseParseError(msg)
 
     for i in range(0, len(ykm_array), 5):
         date = ykm_array[i]
         log_id = ykm_array[i + 4]
         if not isinstance(date, str) or not isinstance(log_id, str):
             msg = "invalid new ykm array entry"
-            raise TypeError(msg)
+            raise ExternalResponseParseError(msg)
         yield date, log_id.split("&", 1)[0]
 
 
@@ -95,18 +95,18 @@ def iter_ids(text: str) -> Iterator[tuple[str, str]]:
     match = YKM_ARRAY_PATTERN.search(text)
     if not match:
         msg = "ykm array not found in input text"
-        raise RuntimeError(msg)
+        raise ExternalResponseParseError(msg)
 
     ykm_text = match.group(1)
     try:
         ykm_array = ast.literal_eval(ykm_text)
     except (SyntaxError, ValueError) as e:
         msg = "failed to parse ykm array"
-        raise RuntimeError(msg) from e
+        raise ExternalResponseParseError(msg) from e
 
     if not isinstance(ykm_array, list):
         msg = "ykm array must be a list"
-        raise TypeError(msg)
+        raise ExternalResponseParseError(msg)
 
     if len(ykm_array) == 0:
         return
@@ -118,7 +118,7 @@ def iter_ids(text: str) -> Iterator[tuple[str, str]]:
             yield from iter_ids_from_old_format(ykm_array)
         case _:
             msg = "unsupported ykm array format"
-            raise RuntimeError(msg)
+            raise ExternalResponseParseError(msg)
 
 
 def parse_id(year: int, date: str, log_id: str) -> db.LogEntry:

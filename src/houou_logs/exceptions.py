@@ -7,6 +7,10 @@ class UserInputError(Exception):
     """Raised when arguments are invalid or out of allowed range."""
 
 
+class ExternalResponseParseError(Exception):
+    """The server response does not match the expected data format."""
+
+
 class LogFetchError(RuntimeError):
     """The server response does not contain a downloadable log."""
 

@@ -14,6 +14,7 @@ from niquests.exceptions import HTTPError
 
 from houou_logs import db
 from houou_logs import fetch as fetch_module
+from houou_logs.exceptions import ExternalResponseParseError
 from houou_logs.fetch import (
     fetch_file_index_text,
     fetch_log_file_content,
@@ -103,7 +104,10 @@ def test_fetch_log_file_content_none() -> None:
     mock_resp.raise_for_status.return_value = None
     mock_session.get.return_value = mock_resp
 
-    with pytest.raises(RuntimeError, match="response content is None"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="response content is None",
+    ):
         fetch_log_file_content(mock_session, fake_url)
 
 
@@ -164,7 +168,10 @@ def test_parse_file_index_rejects_malformed_input() -> None:
 
 
 """
-    with pytest.raises(RuntimeError, match="failed to parse file index"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse file index",
+    ):
         parse_file_index(resp)
 
 

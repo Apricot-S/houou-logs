@@ -12,6 +12,7 @@ import niquests
 from tqdm import tqdm
 
 from houou_logs import db
+from houou_logs.exceptions import ExternalResponseParseError
 from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, iter_log_entries
 from houou_logs.session import TIMEOUT, create_session
 
@@ -49,7 +50,7 @@ def fetch_file_index_text(session: niquests.Session, url: str) -> str:
     text = res.text
     if text is None:
         msg = "response text is None"
-        raise RuntimeError(msg)
+        raise ExternalResponseParseError(msg)
 
     return text
 
@@ -61,7 +62,7 @@ def fetch_log_file_content(session: niquests.Session, url: str) -> bytes:
     content = res.content
     if content is None:
         msg = "response content is None"
-        raise RuntimeError(msg)
+        raise ExternalResponseParseError(msg)
 
     return content
 
@@ -75,7 +76,7 @@ def parse_file_index(response: str) -> dict[str, int]:
         return {}
 
     msg = "failed to parse file index"
-    raise RuntimeError(msg)
+    raise ExternalResponseParseError(msg)
 
 
 def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:

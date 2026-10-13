@@ -12,7 +12,7 @@ import pytest
 from houou_logs import db
 from houou_logs import yakuman as yakuman_module
 from houou_logs.db import LogEntry
-from houou_logs.exceptions import UserInputError
+from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 from houou_logs.yakuman import (
     build_url,
     iter_entries,
@@ -119,7 +119,7 @@ updated="2025/02/01 00:12";
 sw();
 """  # noqa: E501
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ExternalResponseParseError):
         list(iter_ids(text))
 
 
@@ -130,7 +130,10 @@ ykm=[foo];
 sw();
 """
 
-    with pytest.raises(RuntimeError, match="failed to parse ykm array"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse ykm array",
+    ):
         list(iter_ids(text))
 
 
@@ -141,7 +144,10 @@ ykm=['01/31 23:57','etra'];
 sw();
 """
 
-    with pytest.raises(RuntimeError, match="invalid new ykm array length"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="invalid new ykm array length",
+    ):
         list(iter_ids(text))
 
 
@@ -152,7 +158,10 @@ ykm=['01/31 23:57','etra','[1]',[39],123];
 sw();
 """
 
-    with pytest.raises(TypeError, match="invalid new ykm array entry"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="invalid new ykm array entry",
+    ):
         list(iter_ids(text))
 
 
@@ -318,7 +327,10 @@ def test_yakuman_iterator_transaction(
     assert next(ids) == ("01/01 00:00", new_id)
     now = datetime(2025, 2, 1, tzinfo=UTC)
     if failure:
-        with pytest.raises(TypeError, match="invalid new ykm array entry"):
+        with pytest.raises(
+            ExternalResponseParseError,
+            match="invalid new ykm array entry",
+        ):
             yakuman_module.yakuman(path, 2025, 1, now)
     else:
         assert yakuman_module.yakuman(path, 2025, 1, now) == 1
