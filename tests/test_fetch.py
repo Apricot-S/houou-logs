@@ -28,6 +28,118 @@ from houou_logs.log_id import iter_log_entries
 
 
 @pytest.mark.parametrize(
+    "failure",
+    ["body", "decode", "gzip", "truncated", "http"],
+)
+def test_fetch_continues_after_file_errors_and_retries_only_failed_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: str,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filenames = [f"scc2025010{i}.html.gz" for i in range(1, 5)]
+    contents = [
+        gzip.compress(
+            f'00:00 log=2025010{i}00gm-00a9-0000-00000000">\n'.encode(),
+        )
+        for i in range(1, 5)
+    ]
+    invalid: bytes | Exception
+    if failure == "body":
+        invalid = gzip.compress(
+            gzip.decompress(contents[1]) + b"<html>Service unavailable</html>",
+        )
+    elif failure == "decode":
+        invalid = gzip.compress(gzip.decompress(contents[1]) + b"\xff")
+    elif failure == "gzip":
+        invalid = b"not gzip"
+    elif failure == "truncated":
+        invalid = contents[1][:-4]
+    else:
+        invalid = HTTPError("503 Service unavailable")
+    index = (
+        "list(["
+        + ",".join(f"{{file:'{filename}',size:123}}" for filename in filenames)
+        + "]);"
+    )
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(return_value=index),
+    )
+    body_fetch = Mock(
+        side_effect=[
+            contents[0],
+            invalid,
+            invalid,
+            contents[3],
+            contents[1],
+            contents[2],
+        ],
+    )
+    monkeypatch.setattr(fetch_module, "fetch_log_file_content", body_fetch)
+    conn = db.open_db(path)
+    try:
+        db.setup_table(conn)
+        db.insert_file_index(conn.cursor(), filenames[1], 100)
+        conn.commit()
+    finally:
+        conn.close()
+
+    with pytest.raises(
+        (
+            ExternalResponseParseError,
+            UnicodeDecodeError,
+            OSError,
+            EOFError,
+            HTTPError,
+        ),
+    ):
+        fetch_module.fetch(path, archive=False)
+    assert body_fetch.call_count == 4
+    output = capsys.readouterr().out
+    assert filenames[1] in output
+    assert filenames[2] in output
+    conn = db.open_db(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 2
+        assert dict(conn.execute("SELECT file, size FROM file_index")) == {
+            filenames[0]: 123,
+            filenames[1]: 100,
+            filenames[3]: 123,
+        }
+        db.update_fetch_attempt_time(
+            conn.cursor(),
+            fetch_module.FETCH_KIND_LATEST,
+            datetime.now(UTC)
+            - fetch_module.MIN_FETCH_INTERVAL
+            - timedelta(seconds=1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert fetch_module.fetch(path, archive=False) == 2
+    assert body_fetch.call_count == 6
+    assert [call.args[1] for call in body_fetch.call_args_list[4:]] == [
+        f"{fetch_module.LOG_DOWNLOAD_URL}{filename}"
+        for filename in filenames[1:3]
+    ]
+    conn = db.open_db(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 4
+        assert dict(
+            conn.execute("SELECT file, size FROM file_index"),
+        ) == dict.fromkeys(
+            filenames,
+            123,
+        )
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
     ("last_attempt_time", "expected"),
     [
         (datetime(2025, 9, 20, 10, 0, 0, 0, tzinfo=UTC), True),

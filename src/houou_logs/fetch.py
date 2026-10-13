@@ -4,11 +4,13 @@
 
 import io
 import re
+import zlib
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import niquests
+from niquests.exceptions import RequestException
 from tqdm import tqdm
 
 from houou_logs import db
@@ -110,6 +112,7 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
 
 def fetch(db_path: str | Path, *, archive: bool) -> int:
     num_logs = 0
+    first_file_error: Exception | None = None
     with closing(db.open_db(db_path)) as conn, conn:
         db.setup_table(conn)
         cursor = conn.cursor()
@@ -133,14 +136,36 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
 
             for filename, size in tqdm(changed_files.items()):
                 url = f"{LOG_DOWNLOAD_URL}{filename}"
-                content = fetch_log_file_content(session, url)
+                try:
+                    content = fetch_log_file_content(session, url)
 
-                with io.BytesIO(content) as f:
-                    entries = iter_log_entries(filename, f, validate_body=True)
-                    num_logs += db.insert_log_entries(cursor, entries)
+                    with io.BytesIO(content) as f:
+                        entries = iter_log_entries(
+                            filename,
+                            f,
+                            validate_body=True,
+                        )
+                        inserted = db.insert_log_entries(cursor, entries)
+                except (
+                    RequestException,
+                    ExternalResponseParseError,
+                    UnicodeDecodeError,
+                    OSError,
+                    EOFError,
+                    zlib.error,
+                ) as e:
+                    conn.rollback()
+                    tqdm.write(f"{filename}: {e}")
+                    if first_file_error is None:
+                        first_file_error = e
+                    continue
 
                 db.insert_file_index(cursor, filename, size)
-
                 conn.commit()
+                num_logs += inserted
+
+            # Report failure only after committing all successful files.
+            if first_file_error is not None:
+                raise first_file_error
 
     return num_logs
