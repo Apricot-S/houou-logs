@@ -152,15 +152,12 @@ def insert_log_entries(
     return cursor.rowcount
 
 
-def list_undownloaded_log_ids_after(
-    cursor: sqlite3.Cursor,
+def _build_log_filter_conditions(
     players: int | None,
     length: str | None,
-    after_id: str | None,
-    limit: int,
-) -> list[str]:
-    conditions = ["is_processed = 0", "was_error = 0"]
-    params: list = []
+) -> tuple[list[str], list[int | str]]:
+    conditions: list[str] = []
+    params: list[int | str] = []
 
     if players is not None:
         conditions.append("num_players = ?")
@@ -175,6 +172,19 @@ def list_undownloaded_log_ids_after(
             case _:
                 msg = f"unknown length: {length}"
                 raise ValueError(msg)
+
+    return conditions, params
+
+
+def list_undownloaded_log_ids_after(
+    cursor: sqlite3.Cursor,
+    players: int | None,
+    length: str | None,
+    after_id: str | None,
+    limit: int,
+) -> list[str]:
+    filter_conditions, params = _build_log_filter_conditions(players, length)
+    conditions = ["is_processed = 0", "was_error = 0", *filter_conditions]
 
     if after_id is not None:
         conditions.append("id > ?")
@@ -199,22 +209,8 @@ def count_undownloaded_log_ids(
     length: str | None,
     limit: int | None,
 ) -> int:
-    conditions = ["is_processed = 0", "was_error = 0"]
-    params: list = []
-
-    if players is not None:
-        conditions.append("num_players = ?")
-        params.append(players)
-
-    if length is not None:
-        match length:
-            case "t":
-                conditions.append("is_tonpu = 1")
-            case "h":
-                conditions.append("is_tonpu = 0")
-            case _:
-                msg = f"unknown length: {length}"
-                raise ValueError(msg)
+    filter_conditions, params = _build_log_filter_conditions(players, length)
+    conditions = ["is_processed = 0", "was_error = 0", *filter_conditions]
 
     sql = f"""
         SELECT COUNT(*)
@@ -302,22 +298,8 @@ def iter_log_contents(
     limit: int | None,
     offset: int,
 ) -> Generator[tuple[str, bytes]]:
-    conditions = ["is_processed = 1", "was_error = 0"]
-    params: list = []
-
-    if players is not None:
-        conditions.append("num_players = ?")
-        params.append(players)
-
-    if length is not None:
-        match length:
-            case "t":
-                conditions.append("is_tonpu = 1")
-            case "h":
-                conditions.append("is_tonpu = 0")
-            case _:
-                msg = f"unknown length: {length}"
-                raise ValueError(msg)
+    filter_conditions, params = _build_log_filter_conditions(players, length)
+    conditions = ["is_processed = 1", "was_error = 0", *filter_conditions]
 
     sql = f"""
         SELECT id, log
@@ -341,22 +323,8 @@ def count_log_contents(
     limit: int | None,
     offset: int,
 ) -> int:
-    conditions = ["is_processed = 1", "was_error = 0"]
-    params: list = []
-
-    if players is not None:
-        conditions.append("num_players = ?")
-        params.append(players)
-
-    if length is not None:
-        match length:
-            case "t":
-                conditions.append("is_tonpu = 1")
-            case "h":
-                conditions.append("is_tonpu = 0")
-            case _:
-                msg = f"unknown length: {length}"
-                raise ValueError(msg)
+    filter_conditions, params = _build_log_filter_conditions(players, length)
+    conditions = ["is_processed = 1", "was_error = 0", *filter_conditions]
 
     sql = f"""
         SELECT COUNT(*)
