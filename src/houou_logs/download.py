@@ -15,34 +15,16 @@ from niquests.exceptions import RequestException
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.exceptions import LogFetchError, UserInputError
+from houou_logs.exceptions import LogFetchError
+from houou_logs.input_validation import (
+    validate_db_path,
+    validate_length,
+    validate_limit,
+    validate_players,
+)
 from houou_logs.session import TIMEOUT, create_session
 
 DOWNLOAD_BATCH_SIZE = 1000
-
-
-def validate_db_path(db_path: Path) -> None:
-    if not db_path.is_file():
-        msg = f"database file is not found: {db_path}"
-        raise UserInputError(msg)
-
-
-def validate_players(players: int) -> None:
-    if players not in (4, 3):
-        msg = f"invalid number of players: {players}"
-        raise UserInputError(msg)
-
-
-def validate_length(length: str) -> None:
-    if length not in ("t", "h"):
-        msg = f"invalid length of game: {length}"
-        raise UserInputError(msg)
-
-
-def validate_limit(limit: int) -> None:
-    if limit <= 0:
-        msg = f"invalid limit of download: {limit}"
-        raise UserInputError(msg)
 
 
 def build_url(log_id: str) -> str:

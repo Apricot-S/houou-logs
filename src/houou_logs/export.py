@@ -13,13 +13,13 @@ from tempfile import NamedTemporaryFile
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.download import (
+from houou_logs.exceptions import UserInputError
+from houou_logs.input_validation import (
     validate_db_path,
     validate_length,
     validate_limit,
     validate_players,
 )
-from houou_logs.exceptions import UserInputError
 
 
 def validate_offset(offset: int) -> None:
