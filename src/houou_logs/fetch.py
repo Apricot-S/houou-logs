@@ -70,7 +70,11 @@ def fetch_log_file_content(session: niquests.Session, url: str) -> bytes:
 def parse_file_index(response: str) -> dict[str, int]:
     matches = FILE_INDEX_ENTRY_PATTERN.findall(response)
     if matches:
-        return {path: int(size) for path, size in matches}
+        try:
+            return {path: int(size) for path, size in matches}
+        except ValueError as e:
+            msg = "invalid file index size"
+            raise ExternalResponseParseError(msg) from e
 
     if EMPTY_FILE_INDEX_PATTERN.fullmatch(response):
         return {}

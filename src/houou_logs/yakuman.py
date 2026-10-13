@@ -86,8 +86,8 @@ def iter_ids_from_old_format(ykm_array: list) -> Iterator[tuple[str, str]]:
             or not isinstance(entry[0], str)
             or not isinstance(entry[4], str)
         ):
-            tqdm.write("invalid old ykm array entry")
-            continue
+            msg = "invalid old ykm array entry"
+            raise ExternalResponseParseError(msg)
         yield entry[0], entry[4]
 
 
@@ -124,11 +124,11 @@ def iter_ids(text: str) -> Iterator[tuple[str, str]]:
 def parse_id(year: int, date: str, log_id: str) -> db.LogEntry:
     if not YAKUMAN_LOG_DATE_PATTERN.fullmatch(date):
         msg = f"invalid yakuman log date: {date}"
-        raise ValueError(msg)
+        raise ExternalResponseParseError(msg)
 
     if not YAKUMAN_LOG_ID_PATTERN.fullmatch(log_id):
         msg = f"invalid yakuman log ID: {log_id}"
-        raise ValueError(msg)
+        raise ExternalResponseParseError(msg)
 
     date = f"{year}-{date[0:2]}-{date[3:5]}T{date[6:11]}"
     id_parts = log_id.split("-")
@@ -152,7 +152,7 @@ def iter_entries(
     for date, log_id in ids:
         try:
             entry = parse_id(year, date, log_id)
-        except ValueError as e:
+        except ExternalResponseParseError as e:
             tqdm.write(str(e))
         else:
             yield entry

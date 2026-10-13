@@ -4,6 +4,7 @@
 
 import gzip
 import sqlite3
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock
@@ -173,6 +174,18 @@ def test_parse_file_index_rejects_malformed_input() -> None:
         match="failed to parse file index",
     ):
         parse_file_index(resp)
+
+
+def test_parse_file_index_rejects_oversized_size() -> None:
+    limit = sys.get_int_max_str_digits()
+    if limit == 0:
+        pytest.skip("integer string conversion is unlimited")
+    response = "list([{file:'scc.html',size:" + "9" * (limit + 1) + "}]);"
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="invalid file index size",
+    ):
+        parse_file_index(response)
 
 
 def test_parse_file_index_old_1_entry() -> None:

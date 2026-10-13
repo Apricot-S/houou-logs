@@ -5,10 +5,12 @@
 import gzip
 import io
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from houou_logs.db import LogEntry
+from houou_logs.exceptions import ExternalResponseParseError
 from houou_logs.log_id import (
     iter_log_entries,
     parse_date,
@@ -49,8 +51,21 @@ def test_parse_type_3_hanchan() -> None:
 def test_parse_id_rejects_invalid_log_id() -> None:
     invalid_log_id = "invalid"
 
-    with pytest.raises(ValueError, match=f"invalid log ID: {invalid_log_id}"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match=f"invalid log ID: {invalid_log_id}",
+    ):
         parse_id("00:00", invalid_log_id)
+
+
+def test_iter_log_entries_propagates_unexpected_value_error() -> None:
+    content = b'00:00 log=2009020100gm-00a9-0000-00000000">'
+    with (
+        io.BytesIO(content) as source,
+        patch("houou_logs.log_id.parse_type", side_effect=ValueError("bug")),
+        pytest.raises(ValueError, match="bug"),
+    ):
+        list(iter_log_entries("scc.html", source))
 
 
 def test_iter_log_entries_skips_extension_log(tmp_path: Path) -> None:

@@ -426,6 +426,21 @@ def test_main_fetch_parse_error_preserves_attempt_time(
         ("ykm=[123];", "unsupported ykm array format"),
         (
             (
+                "ykm=[['01/01 00:00', 'name', 'data', [], "
+                "'2025010100gm-00a9-0000-00000000'], []];"
+            ),
+            "invalid old ykm array entry",
+        ),
+        (
+            (
+                "ykm=[['01/01 00:00', 'name', 'data', [], "
+                "'2025010100gm-00a9-0000-00000000'], "
+                "['01/01 01:00', 'name', 'data', [], 123]];"
+            ),
+            "invalid old ykm array entry",
+        ),
+        (
+            (
                 "ykm=['01/01 00:00', 'name', 'data', [], "
                 "'2025010100gm-00a9-0000-00000000', "
                 "'01/01 01:00', 'name', 'data', [], 123];"
@@ -487,3 +502,78 @@ def test_main_propagates_unexpected_parser_bugs(
         pytest.raises(error_type, match="unexpected bug"),
     ):
         main(argv)
+
+
+@pytest.mark.parametrize("error_type", [ValueError, RuntimeError, TypeError])
+def test_main_yakuman_propagates_unexpected_parse_id_bug(
+    db_path: Path,
+    error_type: type[Exception],
+) -> None:
+    text = (
+        "ykm=['01/01 00:00', 'name', 'data', [], "
+        "'2025010100gm-00a9-0000-00000000'];"
+    )
+    with (
+        patch("houou_logs.yakuman.create_session"),
+        patch(
+            "houou_logs.yakuman.fetch_yakuman_log_ids_text",
+            return_value=text,
+        ),
+        patch("houou_logs.yakuman.parse_type", side_effect=error_type("bug")),
+        pytest.raises(error_type, match="bug"),
+    ):
+        main(["yakuman", str(db_path), "2025", "1"])
+
+
+@pytest.mark.parametrize("old_format", [False, True])
+@pytest.mark.parametrize("invalid_field", ["date", "id"])
+def test_main_yakuman_skips_invalid_log_and_commits_valid_logs(
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+    invalid_field: str,
+    *,
+    old_format: bool,
+) -> None:
+    first_id = "2025010100gm-00a9-0000-00000000"
+    last_id = "2025010102gm-00a9-0000-00000000"
+    records = [
+        ["01/01 00:00", "name", "data", [], first_id],
+        [
+            "invalid" if invalid_field == "date" else "01/01 01:00",
+            "name",
+            "data",
+            [],
+            "invalid"
+            if invalid_field == "id"
+            else "2025010101gm-00a9-0000-00000000",
+        ],
+        ["01/01 02:00", "name", "data", [], last_id],
+    ]
+    array = (
+        records
+        if old_format
+        else [item for record in records for item in record]
+    )
+    with (
+        patch("houou_logs.yakuman.create_session"),
+        patch(
+            "houou_logs.yakuman.fetch_yakuman_log_ids_text",
+            return_value=f"ykm={array!r};",
+        ),
+    ):
+        assert (
+            main(["yakuman", str(db_path), "2025", "1"]) == SUCCESS_EXIT_CODE
+        )
+    captured = capsys.readouterr()
+    field_label = "ID" if invalid_field == "id" else "date"
+    assert f"invalid yakuman log {field_label}: invalid" in captured.out
+    assert "Number of log entries inserted into the DB: 2" in captured.err
+    assert "Response parse error:" not in captured.err
+    conn = db.open_db(db_path)
+    try:
+        assert {row[0] for row in conn.execute("SELECT id FROM logs")} == {
+            first_id,
+            last_id,
+        }
+    finally:
+        conn.close()
