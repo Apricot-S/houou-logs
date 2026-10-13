@@ -13,8 +13,8 @@ from typing import TextIO
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.download import validate_db_path
 from houou_logs.exceptions import InvalidLogContentError
+from houou_logs.input_validation import validate_db_path
 
 VALIDATE_BATCH_SIZE = 1000
 

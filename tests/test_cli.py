@@ -279,6 +279,66 @@ def test_main_returns_user_input_error_code(
     assert capsys.readouterr().err == "Error: invalid option\n"
 
 
+@pytest.mark.parametrize("command", ["download", "export", "validate"])
+def test_main_rejects_missing_database(
+    command: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "missing.sqlite"
+    output_dir = tmp_path / "xml"
+    argv = ["houou-logs", command, str(db_path)]
+    if command == "export":
+        argv.append(str(output_dir))
+    monkeypatch.setattr("sys.argv", argv)
+
+    assert main() == USER_INPUT_ERROR_EXIT_CODE
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: database file is not found: {db_path}\n"
+    assert not db_path.exists()
+    assert not output_dir.exists()
+
+
+@pytest.mark.parametrize("command", ["download", "export"])
+@pytest.mark.parametrize(
+    ("option", "value", "message"),
+    [
+        ("--players", "2", "invalid number of players: 2"),
+        ("--length", "x", "invalid length of game: x"),
+        ("--limit", "0", "invalid limit: 0"),
+        ("--limit", "-1", "invalid limit: -1"),
+    ],
+)
+def test_main_rejects_invalid_common_options_before_database_access(
+    command: str,
+    option: str,
+    value: str,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "db.sqlite"
+    db_path.touch()
+    output_dir = tmp_path / "xml"
+    argv = ["houou-logs", command, str(db_path)]
+    if command == "export":
+        argv.append(str(output_dir))
+    argv.extend([option, value])
+    monkeypatch.setattr("sys.argv", argv)
+
+    with patch("houou_logs.db.open_db") as mock_open_db:
+        assert main() == USER_INPUT_ERROR_EXIT_CODE
+        mock_open_db.assert_not_called()
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: {message}\n"
+    assert not output_dir.exists()
+
+
 @patch("houou_logs.fetch.fetch")
 def test_main_returns_io_error_code_without_traceback(
     mock_fetch: Mock,
