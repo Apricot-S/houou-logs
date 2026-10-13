@@ -87,7 +87,7 @@ def export(
                         temp_path = Path(f.name)
                         shutil.copyfileobj(gz, f)
                     temp_path.replace(filename)
-                except (OSError, EOFError, zlib.error) as e:
+                except (gzip.BadGzipFile, EOFError, zlib.error) as e:
                     tqdm.write(f"{log_id}: failed to decompress: {e}")
                     num_logs -= 1
                     continue

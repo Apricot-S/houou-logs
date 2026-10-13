@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from houou_logs import db
+from houou_logs.cli import IO_ERROR_EXIT_CODE, SUCCESS_EXIT_CODE, main
 from houou_logs.exceptions import UserInputError
 from houou_logs.export import export, validate_offset
 
@@ -142,18 +143,26 @@ def test_export_failure_preserves_destination_and_removes_temp_file(
         return export(db_path, output_dir, None, None, None, 0)
 
     if failure == "write":
-        with patch(
-            "houou_logs.export.shutil.copyfileobj",
-            side_effect=fail_after_partial_write,
+        with (
+            patch(
+                "houou_logs.export.shutil.copyfileobj",
+                side_effect=fail_after_partial_write,
+            ),
+            pytest.raises(OSError, match="write failed"),
         ):
-            num_logs = run_export()
+            run_export()
+        num_logs = 0
     elif failure == "replace":
-        with patch.object(
-            Path,
-            "replace",
-            side_effect=OSError("replace failed"),
+        with (
+            patch.object(
+                Path,
+                "replace",
+                side_effect=OSError("replace failed"),
+            ),
+            pytest.raises(OSError, match="replace failed"),
         ):
-            num_logs = run_export()
+            run_export()
+        num_logs = 0
     elif failure in ("bug", "memory"):
         error_type = RuntimeError if failure == "bug" else MemoryError
 
@@ -179,3 +188,90 @@ def test_export_failure_preserves_destination_and_removes_temp_file(
         assert list(output_dir.iterdir()) == [output_file]
     else:
         assert list(output_dir.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["create", "write", "replace", "bad-gzip", "truncated"],
+)
+def test_export_cli_distinguishes_output_errors_from_corrupt_gzip(
+    db_path: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+    failure: str,
+) -> None:
+    log_id = "2025010100gm-00a9-0000-00000000"
+    content = gzip.compress(b"<mjloggm />")
+    if failure == "bad-gzip":
+        content = b"not gzip"
+    elif failure == "truncated":
+        content = content[:-4]
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        db.insert_log_entries(
+            conn.cursor(),
+            [
+                db.LogEntry(
+                    id=log_id,
+                    date="2025-01-01T00:00",
+                    num_players=4,
+                    is_tonpu=False,
+                    is_processed=True,
+                    was_error=False,
+                    log=content,
+                ),
+            ],
+        )
+
+    output_dir = tmp_path / "xml"
+    output_dir.mkdir()
+    output_file = output_dir / f"{log_id}.xml"
+    output_file.write_bytes(b"original XML")
+    argv = ["export", str(db_path), str(output_dir)]
+
+    def fail_write(source: BinaryIO, target: BinaryIO) -> None:
+        target.write(source.read(4))
+        msg = "disk full"
+        raise OSError(msg)
+
+    if failure == "create":
+        with patch(
+            "houou_logs.export.NamedTemporaryFile",
+            side_effect=PermissionError("cannot create"),
+        ):
+            exit_code = main(argv)
+    elif failure == "write":
+        with patch(
+            "houou_logs.export.shutil.copyfileobj",
+            side_effect=fail_write,
+        ):
+            exit_code = main(argv)
+    elif failure == "replace":
+        with patch.object(
+            Path,
+            "replace",
+            side_effect=PermissionError("cannot replace"),
+        ):
+            exit_code = main(argv)
+    else:
+        exit_code = main(argv)
+
+    captured = capsys.readouterr()
+    if failure in ("bad-gzip", "truncated"):
+        assert exit_code == SUCCESS_EXIT_CODE
+        assert "failed to decompress" in captured.out
+        assert "Number of logs exported: 0" in captured.err
+        assert "I/O error:" not in captured.err
+    else:
+        assert exit_code == IO_ERROR_EXIT_CODE
+        assert "I/O error:" in captured.err
+        assert "failed to decompress" not in captured.out + captured.err
+        assert "Number of logs exported:" not in captured.err
+        message = {
+            "create": "cannot create",
+            "write": "disk full",
+            "replace": "cannot replace",
+        }[failure]
+        assert message in captured.err
+    assert output_file.read_bytes() == b"original XML"
+    assert list(output_dir.iterdir()) == [output_file]
