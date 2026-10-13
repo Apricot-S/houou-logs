@@ -183,9 +183,53 @@ def test_parse_file_index_rejects_oversized_size() -> None:
     response = "list([{file:'scc.html',size:" + "9" * (limit + 1) + "}]);"
     with pytest.raises(
         ExternalResponseParseError,
-        match="invalid file index size",
+        match="file index size exceeds the integer parsing limit",
     ):
         parse_file_index(response)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "{file:'scc.html',size:100}",
+        "<html>{file:'scc.html',size:100}</html>",
+        "list([{file:'scc.html',size:100}",
+        "list([{file:'scc.html',size:100}, {file:'other.html',bytes:1}]);",
+        "list([{file:'scc.html',size:100}, garbage]);",
+        "list([{file:'scc.html',size:100},,]);",
+        "list([{file:'scc.html',size:100}]); garbage",
+    ],
+)
+def test_parse_file_index_rejects_partially_valid_response(
+    response: str,
+) -> None:
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse file index",
+    ):
+        parse_file_index(response)
+
+
+@pytest.mark.parametrize(
+    ("size", "message"),
+    [
+        (0, "file index size must be positive"),
+        (2**63, "file index size exceeds the supported range"),
+        (10**100, "file index size exceeds the supported range"),
+    ],
+)
+def test_parse_file_index_rejects_size_outside_sqlite_range(
+    size: int,
+    message: str,
+) -> None:
+    with pytest.raises(ExternalResponseParseError, match=message):
+        parse_file_index(f"list([{{file:'scc.html',size:{size}}}]);")
+
+
+def test_parse_file_index_accepts_trailing_comma_and_maximum_size() -> None:
+    assert parse_file_index(
+        f"list([{{file:'scc.html',size:{2**63 - 1}}},]);",
+    ) == {"scc.html": 2**63 - 1}
 
 
 def test_parse_file_index_old_1_entry() -> None:

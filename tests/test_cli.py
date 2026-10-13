@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+from niquests import Response
 
 from houou_logs import db
 from houou_logs.cli import (
@@ -577,3 +578,87 @@ def test_main_yakuman_skips_invalid_log_and_commits_valid_logs(
         }
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "list([{file:'scc.html',size:100}, garbage]);",
+        f"list([{{file:'scc.html',size:{2**63}}}]);",
+    ],
+)
+def test_main_fetch_rejects_invalid_index_before_downloading(
+    db_path: Path,
+    text: str,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    with (
+        patch("houou_logs.fetch.create_session"),
+        patch("houou_logs.fetch.fetch_file_index_text", return_value=text),
+        patch("houou_logs.fetch.fetch_log_file_content") as fetch_content,
+    ):
+        assert main(["fetch", str(db_path)]) == IO_ERROR_EXIT_CODE
+        fetch_content.assert_not_called()
+    captured = capsys.readouterr()
+    assert "Response parse error:" in captured.err
+    assert "Traceback" not in captured.out + captured.err
+    conn = db.open_db(db_path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 0
+        assert conn.execute("SELECT * FROM file_index").fetchall() == []
+        assert db.get_fetch_attempt_time(conn.cursor(), "latest").year > 1970
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("content", [None, b"\xff", b"not gzip"])
+def test_main_fetch_handles_invalid_file_response(
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+    content: bytes | None,
+) -> None:
+    response = Mock(spec_set=Response)
+    response.content = content
+    response.raise_for_status.return_value = None
+    filename = "scc.html" if content == b"\xff" else "scc.html.gz"
+    with (
+        patch("houou_logs.fetch.create_session") as create_session,
+        patch(
+            "houou_logs.fetch.fetch_file_index_text",
+            return_value=f"list([{{file:'{filename}',size:100}}]);",
+        ),
+    ):
+        create_session.return_value.__enter__.return_value.get.return_value = (
+            response
+        )
+        assert main(["fetch", str(db_path)]) == IO_ERROR_EXIT_CODE
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out + captured.err
+    assert "Number of log entries inserted" not in captured.err
+    conn = db.open_db(db_path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 0
+        assert conn.execute("SELECT * FROM file_index").fetchall() == []
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("content", [None, b"\xff"])
+def test_main_yakuman_handles_invalid_response_encoding(
+    db_path: Path,
+    content: bytes | None,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    response = Mock(spec_set=Response)
+    response.content = content
+    response.raise_for_status.return_value = None
+    with patch("houou_logs.yakuman.create_session") as create_session:
+        create_session.return_value.__enter__.return_value.get.return_value = (
+            response
+        )
+        assert (
+            main(["yakuman", str(db_path), "2025", "1"]) == IO_ERROR_EXIT_CODE
+        )
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out + captured.err
+    assert "Number of log entries inserted" not in captured.err
