@@ -4,6 +4,7 @@
 
 import sqlite3
 from collections.abc import Generator
+from functools import partial
 from itertools import product
 
 import pytest
@@ -94,6 +95,61 @@ def test_export_count_matches_selection(
         db.iter_log_contents(cursor, players, length, limit, offset),
     )
     assert len(selected) == expected
+
+
+@pytest.mark.parametrize("players", [None, 3, 4])
+@pytest.mark.parametrize("length", ["", "x", "T"])
+@pytest.mark.parametrize(
+    "query",
+    [
+        "list_undownloaded_log_ids_after",
+        "count_undownloaded_log_ids",
+        "iter_log_contents",
+        "count_log_contents",
+    ],
+)
+def test_log_queries_reject_unknown_length(
+    count_db: sqlite3.Connection,
+    players: int | None,
+    length: str,
+    query: str,
+) -> None:
+    statements: list[str] = []
+    count_db.set_trace_callback(statements.append)
+    cursor = count_db.cursor()
+    queries = {
+        "list_undownloaded_log_ids_after": partial(
+            db.list_undownloaded_log_ids_after,
+            cursor,
+            players,
+            length,
+            None,
+            10,
+        ),
+        "count_undownloaded_log_ids": partial(
+            db.count_undownloaded_log_ids,
+            cursor,
+            players,
+            length,
+            10,
+        ),
+        "iter_log_contents": partial(
+            list,
+            db.iter_log_contents(cursor, players, length, 10, 0),
+        ),
+        "count_log_contents": partial(
+            db.count_log_contents,
+            cursor,
+            players,
+            length,
+            10,
+            0,
+        ),
+    }
+    assert statements == []
+    with pytest.raises(ValueError, match=f"^unknown length: {length}$"):
+        queries[query]()
+    assert statements == []
 
 
 @pytest.mark.parametrize("processed", [False, True])
