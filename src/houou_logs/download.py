@@ -3,6 +3,7 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
+import re
 import sqlite3
 import zlib
 from collections.abc import Iterator
@@ -26,6 +27,14 @@ from houou_logs.session import TIMEOUT, create_session
 
 DOWNLOAD_BATCH_SIZE = 1000
 
+# Identify the root's opening tag. Tenhou logs can contain malformed
+# XML, such as unescaped attribute values. Leave validation to validate.
+_LOG_PREFIX = re.compile(
+    rb"\A(?:\xef\xbb\xbf)?[ \t\r\n]*"
+    rb"(?:<\?xml[ \t\r\n][\s\S]*?\?>[ \t\r\n]*)?"
+    rb"<mjloggm(?=[ \t\r\n/>])",
+)
+
 
 def build_url(log_id: str) -> str:
     return f"https://tenhou.net/0/log/?{log_id}"
@@ -37,18 +46,13 @@ def fetch_log_content(session: Session, url: str) -> bytes:
         msg = f"failed to fetch: HTTP {resp.status_code}"
         raise LogFetchError(msg)
 
-    text = resp.text
-    if text is None:
-        msg = "response text is None (failed to decode or empty response)"
-        raise LogFetchError(msg)
-
-    if "mjlog" not in text:
-        msg = "no log content in response"
-        raise LogFetchError(msg)
-
     content = resp.content
     if content is None:
         msg = "content could not be retrieved"
+        raise LogFetchError(msg)
+
+    if _LOG_PREFIX.match(content) is None:
+        msg = "no log content in response"
         raise LogFetchError(msg)
 
     return content
