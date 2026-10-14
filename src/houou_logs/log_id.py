@@ -19,6 +19,8 @@ LINE_PATTERN = re.compile(r'^(\d{2}:\d{2}).*?log=([^">]+)', re.MULTILINE)
 LOG_ID_PATTERN = re.compile(
     r"^\d{10}gm-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{8}$",
 )
+LOG_DATE_PATTERN = re.compile(r"\d{8}(?:\d{2})?")
+TIME_PATTERN = re.compile(r"\d{2}:\d{2}")
 
 TYPE_IS_HANCHAN = 0x008
 TYPE_IS_3_PLAYERS = 0x010
@@ -26,8 +28,7 @@ TYPE_IS_3_PLAYERS = 0x010
 
 def parse_date(time: str, log_date: str) -> str:
     msg = f"invalid log date: {log_date} {time}"
-    if not re.fullmatch(r"\d{8}(?:\d{2})?", log_date) or not re.fullmatch(
-        r"\d{2}:\d{2}",
+    if not LOG_DATE_PATTERN.fullmatch(log_date) or not TIME_PATTERN.fullmatch(
         time,
     ):
         raise ExternalResponseParseError(msg)
