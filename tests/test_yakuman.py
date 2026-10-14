@@ -256,6 +256,60 @@ def test_parse_id_accepts_legacy_yakuman_log_id_without_hour() -> None:
     assert parse_id(year, date, log_id) == entry
 
 
+@pytest.mark.parametrize(
+    ("year", "date", "prefix"),
+    [
+        (2025, "02/31 99:99", "2025023199"),
+        (2025, "02/31 00:00", "2025023100"),
+        (2025, "00/01 00:00", "2025000100"),
+        (2025, "13/01 00:00", "2025130100"),
+        (2025, "01/00 00:00", "2025010000"),
+        (2025, "01/01 24:00", "2025010124"),
+        (2025, "01/01 99:99", "2025010199"),
+        (2025, "01/01 23:60", "2025010123"),
+        (2025, "02/29 00:00", "2025022900"),
+        (1900, "02/29 00:00", "1900022900"),
+        (2025, "01/01 00:00", "2025010124"),
+        (2025, "02/31 00:00", "20250231"),
+        (0, "01/01 00:00", "0000010100"),
+    ],
+)
+def test_parse_id_rejects_invalid_datetime(
+    year: int,
+    date: str,
+    prefix: str,
+) -> None:
+    with pytest.raises(ExternalResponseParseError, match="invalid log date"):
+        parse_id(year, date, f"{prefix}gm-0001-0000-12345678")
+
+
+@pytest.mark.parametrize("prefix", ["2024022923", "20240229"])
+def test_parse_id_accepts_leap_day(prefix: str) -> None:
+    entry = parse_id(2024, "02/29 23:59", f"{prefix}gm-0001-0000-12345678")
+    assert entry.date == "2024-02-29T23:59"
+
+
+@pytest.mark.parametrize("prefix", ["2024010123", "2025010223", "20250102"])
+def test_parse_id_rejects_mismatched_date(prefix: str) -> None:
+    with pytest.raises(ExternalResponseParseError, match="does not match"):
+        parse_id(2025, "01/01 23:59", f"{prefix}gm-0001-0000-12345678")
+
+
+def test_iter_entries_skips_invalid_datetime(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ids = [
+        ("02/31 99:99", "2025023199gm-0001-0000-12345678"),
+        ("01/01 23:59", "2025010223gm-0001-0000-12345678"),
+        ("01/01 23:59", "20250101gm-0001-0000-12345678"),
+    ]
+    entries = list(iter_entries(2025, ids))
+    assert [entry.date for entry in entries] == ["2025-01-01T23:59"]
+    output = capsys.readouterr().out
+    assert "invalid log date" in output
+    assert "does not match" in output
+
+
 def test_parse_id_rejects_invalid_yakuman_log_id() -> None:
     with pytest.raises(
         ExternalResponseParseError,

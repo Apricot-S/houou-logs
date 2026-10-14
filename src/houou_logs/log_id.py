@@ -5,6 +5,7 @@
 import gzip
 import re
 from collections.abc import Iterable, Iterator
+from datetime import UTC, datetime
 from typing import IO
 
 from tqdm import tqdm
@@ -24,9 +25,31 @@ TYPE_IS_3_PLAYERS = 0x010
 
 
 def parse_date(time: str, log_date: str) -> str:
+    msg = f"invalid log date: {log_date} {time}"
+    if not re.fullmatch(r"\d{8}(?:\d{2})?", log_date) or not re.fullmatch(
+        r"\d{2}:\d{2}",
+        time,
+    ):
+        raise ExternalResponseParseError(msg)
+
     year = log_date[0:4]
     month = log_date[4:6]
     day = log_date[6:8]
+    try:
+        datetime(
+            int(year),
+            int(month),
+            int(day),
+            int(time[0:2]),
+            int(time[3:5]),
+            tzinfo=UTC,
+        )
+    except ValueError as e:
+        raise ExternalResponseParseError(msg) from e
+
+    if len(log_date) == 10 and not 0 <= int(log_date[8:10]) <= 23:  # noqa: PLR2004
+        raise ExternalResponseParseError(msg)
+
     return f"{year}-{month}-{day}T{time}"
 
 
@@ -45,7 +68,7 @@ def parse_id(time: str, log_id: str) -> LogEntry:
         msg = f"invalid log ID: {log_id}"
         raise ExternalResponseParseError(msg)
 
-    date = parse_date(time, log_id[0:8])
+    date = parse_date(time, log_id[0:10])
     num_players, is_tonpu = parse_type(log_id[13:17])
 
     return LogEntry(
