@@ -50,7 +50,7 @@ def should_fetch(
     if now is None:
         now = datetime.now(tz=UTC)
 
-    return now - last_attempt_time > MIN_FETCH_INTERVAL
+    return now - last_attempt_time >= MIN_FETCH_INTERVAL
 
 
 def fetch_file_index_text(session: niquests.Session, url: str) -> str:
@@ -110,7 +110,8 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
     }
 
 
-def fetch(db_path: str | Path, *, archive: bool) -> int:
+def fetch(db_path: str | Path, *, archive: bool) -> int | timedelta:
+    """Return the inserted count, or the retry delay when skipped."""
     num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:
         db.setup_table(conn)
@@ -118,10 +119,11 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
 
         kind = FETCH_KIND_ARCHIVE if archive else FETCH_KIND_LATEST
         last_attempt_time = db.get_fetch_attempt_time(cursor, kind)
-        if not should_fetch(last_attempt_time):
-            return -1
+        now = datetime.now(UTC)
+        if not should_fetch(last_attempt_time, now=now):
+            return last_attempt_time + MIN_FETCH_INTERVAL - now
 
-        db.update_fetch_attempt_time(cursor, kind, datetime.now(UTC))
+        db.update_fetch_attempt_time(cursor, kind, now)
         conn.commit()
 
         with create_session() as session:

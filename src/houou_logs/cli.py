@@ -9,7 +9,7 @@ import zipfile
 import zlib
 from argparse import ArgumentParser, Namespace
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from gzip import BadGzipFile
 from pathlib import Path
 
@@ -75,12 +75,25 @@ def set_fetch_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
+def format_retry_delay(remaining: timedelta) -> str:
+    step = timedelta(seconds=10)
+    seconds = -(-remaining // step) * 10
+    minutes, seconds = divmod(seconds, 60)
+    parts = []
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds:
+        parts.append(f"{seconds}s")
+    return " ".join(parts)
+
+
 def fetch_cli(args: Namespace) -> None:
-    num_logs = fetch.fetch(args.db_path, archive=args.archive)
-    if num_logs == -1:
-        msg = "Skipping fetch: last fetch was within 20 minutes."
+    result = fetch.fetch(args.db_path, archive=args.archive)
+    if isinstance(result, timedelta):
+        delay = format_retry_delay(result)
+        msg = f"Please retry in approximately {delay}."
     else:
-        msg = f"Number of log entries inserted into the DB: {num_logs}"
+        msg = f"Number of log entries inserted into the DB: {result}"
     print(msg, file=sys.stderr)
 
 
