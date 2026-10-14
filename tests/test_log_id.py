@@ -72,6 +72,75 @@ def test_parse_date() -> None:
     assert parse_date("00:05", "2024010100") == "2024-01-01T00:05"
 
 
+@pytest.mark.parametrize(
+    ("time", "log_date"),
+    [
+        ("00:00", "2025023100"),
+        ("00:00", "2025000100"),
+        ("00:00", "2025130100"),
+        ("00:00", "2025010000"),
+        ("24:00", "2025010124"),
+        ("99:99", "2025010199"),
+        ("23:60", "2025010123"),
+        ("00:00", "2025022900"),
+        ("00:00", "2025010124"),
+        ("00:00", "0000010100"),
+    ],
+)
+def test_parse_date_and_id_reject_invalid_datetime(
+    time: str,
+    log_date: str,
+) -> None:
+    with pytest.raises(ExternalResponseParseError, match="invalid log date"):
+        parse_date(time, log_date)
+    with pytest.raises(ExternalResponseParseError, match="invalid log date"):
+        parse_id(time, f"{log_date}gm-00a9-0000-00000000")
+
+
+@pytest.mark.parametrize("year", [2024, 2000])
+def test_parse_id_accepts_leap_day(year: int) -> None:
+    entry = parse_id("23:59", f"{year}022923gm-00a9-0000-00000000")
+    assert entry.date == f"{year}-02-29T23:59"
+
+
+@pytest.mark.parametrize(
+    ("time", "log_date"),
+    [
+        ("0:00", "20250101"),
+        ("00:00:00", "20250101"),
+        ("00:00", "202501"),
+        ("00:00", "20250101000"),
+    ],
+)
+def test_parse_date_rejects_invalid_format(time: str, log_date: str) -> None:
+    with pytest.raises(ExternalResponseParseError, match="invalid log date"):
+        parse_date(time, log_date)
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+def test_iter_log_entries_skips_invalid_datetime(
+    *,
+    compressed: bool,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    content = b'99:99 log=2025023199gm-00a9-0000-00000000">\n'
+    content += b'23:59 log=2024022923gm-00a9-0000-00000001">\n'
+    filename = "scc.html.gz" if compressed else "scc.html"
+    payload = gzip.compress(content) if compressed else content
+    with io.BytesIO(payload) as source:
+        entries = list(iter_log_entries(filename, source))
+    assert [entry.date for entry in entries] == ["2024-02-29T23:59"]
+    assert f"{filename}: invalid log date" in capsys.readouterr().out
+    with (
+        io.BytesIO(payload) as source,
+        pytest.raises(
+            ExternalResponseParseError,
+            match="invalid log date",
+        ),
+    ):
+        list(iter_log_entries(filename, source, validate_body=True))
+
+
 def test_parse_type_4_hanchan() -> None:
     num_players, is_tonpu = parse_type("00a9")
     assert num_players == 4

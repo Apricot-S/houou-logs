@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.exceptions import ExternalResponseParseError, UserInputError
-from houou_logs.log_id import parse_type
+from houou_logs.log_id import parse_date, parse_type
 from houou_logs.session import TIMEOUT, create_session
 
 YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
@@ -130,7 +130,16 @@ def parse_id(year: int, date: str, log_id: str) -> db.LogEntry:
         msg = f"invalid yakuman log ID: {log_id}"
         raise ExternalResponseParseError(msg)
 
-    date = f"{year}-{date[0:2]}-{date[3:5]}T{date[6:11]}"
+    log_date = f"{year:04}{date[0:2]}{date[3:5]}"
+    # Legacy IDs contain only the date; newer IDs also contain the hour.
+    id_date = log_id.split("gm", 1)[0]
+    if id_date[:8] != log_date:
+        msg = (
+            f"yakuman log date does not match log ID: {year} {date}, {log_id}"
+        )
+        raise ExternalResponseParseError(msg)
+
+    date = parse_date(date[6:11], id_date)
     id_parts = log_id.split("-")
     num_players, is_tonpu = parse_type(id_parts[1])
 
