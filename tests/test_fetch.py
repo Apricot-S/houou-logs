@@ -134,13 +134,80 @@ def test_fetch_continues_after_file_errors_and_retries_only_failed_files(
     ("last_attempt_time", "expected"),
     [
         (datetime(2025, 9, 20, 10, 0, 0, 0, tzinfo=UTC), True),
-        (datetime(2025, 9, 20, 10, 40, 0, 0, tzinfo=UTC), False),
+        (datetime(2025, 9, 20, 10, 40, 0, 0, tzinfo=UTC), True),
+        (datetime(2025, 9, 20, 10, 40, 0, 1, tzinfo=UTC), False),
         (datetime(2025, 9, 20, 10, 39, 59, 999_999, tzinfo=UTC), True),
     ],
 )
 def test_should_fetch(last_attempt_time: datetime, *, expected: bool) -> None:
     now = datetime(2025, 9, 20, 11, 0, 0, 0, tzinfo=UTC)
     assert should_fetch(last_attempt_time, now=now) == expected
+
+
+@pytest.mark.parametrize("archive", [False, True])
+@pytest.mark.parametrize(
+    ("remaining", "delay"),
+    [
+        (timedelta(minutes=5, seconds=23), "5m 30s"),
+        (timedelta(minutes=1), "1m"),
+        (timedelta(seconds=12), "20s"),
+        (timedelta(seconds=1), "10s"),
+        (timedelta(microseconds=1), "10s"),
+        (timedelta(seconds=10), "10s"),
+        (timedelta(seconds=10, microseconds=1), "20s"),
+        (timedelta(0), None),
+        (timedelta(microseconds=-1), None),
+    ],
+)
+def test_fetch_retry_delay(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    remaining: timedelta,
+    delay: str | None,
+    *,
+    archive: bool,
+) -> None:
+    path = tmp_path / "fetch.db"
+    now = datetime(2025, 9, 20, 11, 0, tzinfo=UTC)
+    last_attempt = now - fetch_module.MIN_FETCH_INTERVAL + remaining
+    kind = (
+        fetch_module.FETCH_KIND_ARCHIVE
+        if archive
+        else fetch_module.FETCH_KIND_LATEST
+    )
+    conn = db.open_db(path)
+    try:
+        db.setup_table(conn)
+        db.update_fetch_attempt_time(conn.cursor(), kind, last_attempt)
+        conn.commit()
+    finally:
+        conn.close()
+    mock_datetime = Mock(wraps=datetime)
+    mock_datetime.now.return_value = now
+    monkeypatch.setattr(fetch_module, "datetime", mock_datetime)
+    index_fetch = Mock(return_value="list([]);")
+    monkeypatch.setattr(fetch_module, "fetch_file_index_text", index_fetch)
+    session_factory = Mock(wraps=fetch_module.create_session)
+    monkeypatch.setattr(fetch_module, "create_session", session_factory)
+
+    assert fetch_module.fetch(path, archive=archive) == (-1 if delay else 0)
+    output = capsys.readouterr().err
+    if delay:
+        assert output == f"Please retry in approximately {delay}.\n"
+        index_fetch.assert_not_called()
+        session_factory.assert_not_called()
+    else:
+        assert "Please retry" not in output
+        index_fetch.assert_called_once()
+    conn = db.open_db(path)
+    try:
+        assert db.get_fetch_attempt_time(conn.cursor(), kind) == (
+            last_attempt if delay else now
+        )
+    finally:
+        conn.close()
+    mock_datetime.now.assert_called_once_with(UTC)
 
 
 def test_fetch_file_index_text_success() -> None:

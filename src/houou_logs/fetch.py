@@ -4,6 +4,7 @@
 
 import io
 import re
+import sys
 import zlib
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
@@ -50,7 +51,19 @@ def should_fetch(
     if now is None:
         now = datetime.now(tz=UTC)
 
-    return now - last_attempt_time > MIN_FETCH_INTERVAL
+    return now - last_attempt_time >= MIN_FETCH_INTERVAL
+
+
+def format_retry_delay(remaining: timedelta) -> str:
+    step = timedelta(seconds=10)
+    seconds = -(-remaining // step) * 10
+    minutes, seconds = divmod(seconds, 60)
+    parts = []
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds:
+        parts.append(f"{seconds}s")
+    return " ".join(parts)
 
 
 def fetch_file_index_text(session: niquests.Session, url: str) -> str:
@@ -118,10 +131,17 @@ def fetch(db_path: str | Path, *, archive: bool) -> int:
 
         kind = FETCH_KIND_ARCHIVE if archive else FETCH_KIND_LATEST
         last_attempt_time = db.get_fetch_attempt_time(cursor, kind)
-        if not should_fetch(last_attempt_time):
+        now = datetime.now(UTC)
+        if not should_fetch(last_attempt_time, now=now):
+            remaining = last_attempt_time + MIN_FETCH_INTERVAL - now
+            delay = format_retry_delay(remaining)
+            print(
+                f"Please retry in approximately {delay}.",
+                file=sys.stderr,
+            )
             return -1
 
-        db.update_fetch_attempt_time(cursor, kind, datetime.now(UTC))
+        db.update_fetch_attempt_time(cursor, kind, now)
         conn.commit()
 
         with create_session() as session:
