@@ -5,7 +5,7 @@
 import gzip
 from argparse import ArgumentParser, Namespace
 from collections.abc import Iterator, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -80,6 +80,39 @@ def test_fetch_cli_calls_fetch(mock_fetch: Mock) -> None:
     args = Namespace(db_path=Path("db.sqlite"), archive=True)
     fetch_cli(args)
     mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=True)
+
+
+@pytest.mark.parametrize(
+    ("result", "message"),
+    [
+        (
+            timedelta(minutes=5, seconds=23),
+            "Please retry in approximately 5m 30s.",
+        ),
+        (timedelta(minutes=1), "Please retry in approximately 1m."),
+        (timedelta(seconds=12), "Please retry in approximately 20s."),
+        (timedelta(seconds=1), "Please retry in approximately 10s."),
+        (timedelta(microseconds=1), "Please retry in approximately 10s."),
+        (timedelta(seconds=10), "Please retry in approximately 10s."),
+        (
+            timedelta(seconds=10, microseconds=1),
+            "Please retry in approximately 20s.",
+        ),
+        (0, "Number of log entries inserted into the DB: 0"),
+        (3, "Number of log entries inserted into the DB: 3"),
+    ],
+)
+def test_fetch_cli_reports_result(
+    capsys: pytest.CaptureFixture[str],
+    result: int | timedelta,
+    message: str,
+) -> None:
+    args = Namespace(db_path=Path("db.sqlite"), archive=False)
+    with patch("houou_logs.fetch.fetch", return_value=result):
+        fetch_cli(args)
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == f"{message}\n"
 
 
 def test_set_yakuman_args() -> None:

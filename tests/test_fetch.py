@@ -191,14 +191,17 @@ def test_fetch_retry_delay(
     session_factory = Mock(wraps=fetch_module.create_session)
     monkeypatch.setattr(fetch_module, "create_session", session_factory)
 
-    assert fetch_module.fetch(path, archive=archive) == (-1 if delay else 0)
-    output = capsys.readouterr().err
+    assert fetch_module.fetch(path, archive=archive) == (
+        remaining if delay else 0
+    )
+    output = capsys.readouterr()
     if delay:
-        assert output == f"Please retry in approximately {delay}.\n"
+        assert output.out == ""
+        assert output.err == ""
         index_fetch.assert_not_called()
         session_factory.assert_not_called()
     else:
-        assert "Please retry" not in output
+        assert "Please retry" not in output.err
         index_fetch.assert_called_once()
     conn = db.open_db(path)
     try:
@@ -491,7 +494,7 @@ def test_fetch_archive_uses_archive_attempt_time(
         mock_fetch_file_index_text,
     )
 
-    assert fetch_module.fetch(db_path, archive=True) == -1
+    assert isinstance(fetch_module.fetch(db_path, archive=True), timedelta)
     mock_fetch_file_index_text.assert_not_called()
 
 
