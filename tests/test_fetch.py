@@ -2,7 +2,11 @@
 # SPDX-License-Identifier: MIT
 # This file is part of https://github.com/Apricot-S/houou-logs
 
-from datetime import UTC, datetime
+import gzip
+import io
+import sqlite3
+import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -12,6 +16,7 @@ from niquests.exceptions import HTTPError
 
 from houou_logs import db
 from houou_logs import fetch as fetch_module
+from houou_logs.exceptions import ExternalResponseParseError
 from houou_logs.fetch import (
     fetch_file_index_text,
     fetch_log_file_content,
@@ -19,19 +24,193 @@ from houou_logs.fetch import (
     parse_file_index,
     should_fetch,
 )
+from houou_logs.log_id import iter_log_entries
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["body", "decode", "gzip", "truncated", "http"],
+)
+def test_fetch_continues_after_file_errors_and_retries_only_failed_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: str,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filenames = [f"scc2025010{i}.html.gz" for i in range(1, 5)]
+    contents = [
+        gzip.compress(
+            f'00:00 log=2025010{i}00gm-00a9-0000-00000000">\n'.encode(),
+        )
+        for i in range(1, 5)
+    ]
+    invalid: bytes | Exception
+    if failure == "body":
+        invalid = gzip.compress(
+            gzip.decompress(contents[1]) + b"<html>Service unavailable</html>",
+        )
+    elif failure == "decode":
+        invalid = gzip.compress(gzip.decompress(contents[1]) + b"\xff")
+    elif failure == "gzip":
+        invalid = b"not gzip"
+    elif failure == "truncated":
+        invalid = contents[1][:-4]
+    else:
+        invalid = HTTPError("503 Service unavailable")
+    index = (
+        "list(["
+        + ",".join(f"{{file:'{filename}',size:123}}" for filename in filenames)
+        + "]);"
+    )
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(return_value=index),
+    )
+    body_fetch = Mock(
+        side_effect=[
+            contents[0],
+            invalid,
+            invalid,
+            contents[3],
+            contents[1],
+            contents[2],
+        ],
+    )
+    monkeypatch.setattr(fetch_module, "fetch_log_file_content", body_fetch)
+    conn = db.open_db(path)
+    try:
+        db.setup_table(conn)
+        db.insert_file_index(conn.cursor(), filenames[1], 100)
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert fetch_module.fetch(path, archive=False) == 2
+    assert body_fetch.call_count == 4
+    output = capsys.readouterr().out
+    assert filenames[1] in output
+    assert filenames[2] in output
+    conn = db.open_db(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 2
+        assert dict(conn.execute("SELECT file, size FROM file_index")) == {
+            filenames[0]: 123,
+            filenames[1]: 100,
+            filenames[3]: 123,
+        }
+        db.update_fetch_attempt_time(
+            conn.cursor(),
+            fetch_module.FETCH_KIND_LATEST,
+            datetime.now(UTC)
+            - fetch_module.MIN_FETCH_INTERVAL
+            - timedelta(seconds=1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert fetch_module.fetch(path, archive=False) == 2
+    assert body_fetch.call_count == 6
+    assert [call.args[1] for call in body_fetch.call_args_list[4:]] == [
+        f"{fetch_module.LOG_DOWNLOAD_URL}{filename}"
+        for filename in filenames[1:3]
+    ]
+    conn = db.open_db(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 4
+        assert dict(
+            conn.execute("SELECT file, size FROM file_index"),
+        ) == dict.fromkeys(
+            filenames,
+            123,
+        )
+    finally:
+        conn.close()
 
 
 @pytest.mark.parametrize(
     ("last_attempt_time", "expected"),
     [
         (datetime(2025, 9, 20, 10, 0, 0, 0, tzinfo=UTC), True),
-        (datetime(2025, 9, 20, 10, 40, 0, 0, tzinfo=UTC), False),
+        (datetime(2025, 9, 20, 10, 40, 0, 0, tzinfo=UTC), True),
+        (datetime(2025, 9, 20, 10, 40, 0, 1, tzinfo=UTC), False),
         (datetime(2025, 9, 20, 10, 39, 59, 999_999, tzinfo=UTC), True),
     ],
 )
 def test_should_fetch(last_attempt_time: datetime, *, expected: bool) -> None:
     now = datetime(2025, 9, 20, 11, 0, 0, 0, tzinfo=UTC)
     assert should_fetch(last_attempt_time, now=now) == expected
+
+
+@pytest.mark.parametrize("archive", [False, True])
+@pytest.mark.parametrize(
+    ("remaining", "delay"),
+    [
+        (timedelta(minutes=5, seconds=23), "5m 30s"),
+        (timedelta(minutes=1), "1m"),
+        (timedelta(seconds=12), "20s"),
+        (timedelta(seconds=1), "10s"),
+        (timedelta(microseconds=1), "10s"),
+        (timedelta(seconds=10), "10s"),
+        (timedelta(seconds=10, microseconds=1), "20s"),
+        (timedelta(0), None),
+        (timedelta(microseconds=-1), None),
+    ],
+)
+def test_fetch_retry_delay(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    remaining: timedelta,
+    delay: str | None,
+    *,
+    archive: bool,
+) -> None:
+    path = tmp_path / "fetch.db"
+    now = datetime(2025, 9, 20, 11, 0, tzinfo=UTC)
+    last_attempt = now - fetch_module.MIN_FETCH_INTERVAL + remaining
+    kind = (
+        fetch_module.FETCH_KIND_ARCHIVE
+        if archive
+        else fetch_module.FETCH_KIND_LATEST
+    )
+    conn = db.open_db(path)
+    try:
+        db.setup_table(conn)
+        db.update_fetch_attempt_time(conn.cursor(), kind, last_attempt)
+        conn.commit()
+    finally:
+        conn.close()
+    mock_datetime = Mock(wraps=datetime)
+    mock_datetime.now.return_value = now
+    monkeypatch.setattr(fetch_module, "datetime", mock_datetime)
+    index_fetch = Mock(return_value="list([]);")
+    monkeypatch.setattr(fetch_module, "fetch_file_index_text", index_fetch)
+    session_factory = Mock(wraps=fetch_module.create_session)
+    monkeypatch.setattr(fetch_module, "create_session", session_factory)
+
+    assert fetch_module.fetch(path, archive=archive) == (
+        remaining if delay else 0
+    )
+    output = capsys.readouterr()
+    if delay:
+        assert output.out == ""
+        assert output.err == ""
+        index_fetch.assert_not_called()
+        session_factory.assert_not_called()
+    else:
+        assert "Please retry" not in output.err
+        index_fetch.assert_called_once()
+    conn = db.open_db(path)
+    try:
+        assert db.get_fetch_attempt_time(conn.cursor(), kind) == (
+            last_attempt if delay else now
+        )
+    finally:
+        conn.close()
+    mock_datetime.now.assert_called_once_with(UTC)
 
 
 def test_fetch_file_index_text_success() -> None:
@@ -101,7 +280,10 @@ def test_fetch_log_file_content_none() -> None:
     mock_resp.raise_for_status.return_value = None
     mock_session.get.return_value = mock_resp
 
-    with pytest.raises(RuntimeError, match="response content is None"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="response content is None",
+    ):
         fetch_log_file_content(mock_session, fake_url)
 
 
@@ -162,8 +344,67 @@ def test_parse_file_index_rejects_malformed_input() -> None:
 
 
 """
-    with pytest.raises(RuntimeError, match="failed to parse file index"):
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse file index",
+    ):
         parse_file_index(resp)
+
+
+def test_parse_file_index_rejects_oversized_size() -> None:
+    limit = sys.get_int_max_str_digits()
+    if limit == 0:
+        pytest.skip("integer string conversion is unlimited")
+    response = "list([{file:'scc.html',size:" + "9" * (limit + 1) + "}]);"
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="file index size exceeds the integer parsing limit",
+    ):
+        parse_file_index(response)
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "{file:'scc.html',size:100}",
+        "<html>{file:'scc.html',size:100}</html>",
+        "list([{file:'scc.html',size:100}",
+        "list([{file:'scc.html',size:100}, {file:'other.html',bytes:1}]);",
+        "list([{file:'scc.html',size:100}, garbage]);",
+        "list([{file:'scc.html',size:100},,]);",
+        "list([{file:'scc.html',size:100}]); garbage",
+    ],
+)
+def test_parse_file_index_rejects_partially_valid_response(
+    response: str,
+) -> None:
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse file index",
+    ):
+        parse_file_index(response)
+
+
+@pytest.mark.parametrize(
+    ("size", "message"),
+    [
+        (0, "file index size must be positive"),
+        (2**63, "file index size exceeds the supported range"),
+        (10**100, "file index size exceeds the supported range"),
+    ],
+)
+def test_parse_file_index_rejects_size_outside_sqlite_range(
+    size: int,
+    message: str,
+) -> None:
+    with pytest.raises(ExternalResponseParseError, match=message):
+        parse_file_index(f"list([{{file:'scc.html',size:{size}}}]);")
+
+
+def test_parse_file_index_accepts_trailing_comma_and_maximum_size() -> None:
+    assert parse_file_index(
+        f"list([{{file:'scc.html',size:{2**63 - 1}}},]);",
+    ) == {"scc.html": 2**63 - 1}
 
 
 def test_parse_file_index_old_1_entry() -> None:
@@ -253,7 +494,7 @@ def test_fetch_archive_uses_archive_attempt_time(
         mock_fetch_file_index_text,
     )
 
-    assert fetch_module.fetch(db_path, archive=True) == -1
+    assert isinstance(fetch_module.fetch(db_path, archive=True), timedelta)
     mock_fetch_file_index_text.assert_not_called()
 
 
@@ -284,5 +525,191 @@ def test_fetch_updates_attempt_time_before_file_index_request(
             fetch_module.FETCH_KIND_LATEST,
         )
         assert last_attempt_time == fixed_now
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+@pytest.mark.parametrize(
+    "failure",
+    [None, "decode", "body", "invalid_id", "database", "index"],
+)
+def test_fetch_file_is_atomic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    compressed: bool,
+    failure: str | None,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filename = "scc.html.gz" if compressed else "scc.html"
+    content = b'00:00 log=2009020100gm-00a9-0000-00000000">\n' * 2
+    if failure == "decode":
+        content += b"\xff\n"
+    if failure == "body":
+        content += b"<html>Service unavailable</html>\n"
+    if failure == "invalid_id":
+        content += b'00:01 log=invalid">\n'
+    if compressed:
+        content = gzip.compress(content)
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(
+            return_value=f"list([{{file:'{filename}',size:100}}]);",
+        ),
+    )
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_log_file_content",
+        Mock(
+            return_value=content,
+        ),
+    )
+    statements: list[str] = []
+    original_open = db.open_db
+
+    def traced_open(db_path: str | Path) -> sqlite3.Connection:
+        conn = original_open(db_path)
+        conn.set_trace_callback(statements.append)
+        if failure == "database":
+            conn.execute(
+                "CREATE TRIGGER reject_log BEFORE INSERT ON logs "
+                "BEGIN SELECT RAISE(ABORT, 'insert failure'); END;",
+            )
+        return conn
+
+    # Create the tables before installing the failure trigger.
+    initial = original_open(path)
+    db.setup_table(initial)
+    initial.close()
+    monkeypatch.setattr(db, "open_db", traced_open)
+    if failure == "index":
+        monkeypatch.setattr(
+            db,
+            "insert_file_index",
+            Mock(
+                side_effect=sqlite3.OperationalError("index failure"),
+            ),
+        )
+    if failure in ("database", "index"):
+        with pytest.raises(sqlite3.DatabaseError):
+            fetch_module.fetch(path, archive=False)
+    else:
+        assert fetch_module.fetch(path, archive=False) == (0 if failure else 1)
+    if not failure:
+        start = next(
+            i for i, sql in enumerate(statements) if "INSERT INTO logs" in sql
+        )
+        end = next(
+            i
+            for i in range(start, len(statements))
+            if statements[i] == "COMMIT"
+        )
+        assert any(
+            "INSERT INTO file_index" in sql for sql in statements[start:end]
+        )
+        # The outer context also commits an empty transaction.
+        assert statements[start:].count("COMMIT") == 2
+    conn = original_open(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == (0 if failure else 1)
+        assert conn.execute(
+            "SELECT file, size FROM file_index",
+        ).fetchall() == ([] if failure else [(filename, 100)])
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [b"", b"\r\n \t\n", b'00:00 log=2009020100gm-00a9-0000-00000000">\n'],
+)
+def test_fetch_records_valid_list_with_no_new_ids(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    content: bytes,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filename = "scc20250101.html.gz"
+    conn = db.open_db(path)
+    try:
+        db.setup_table(conn)
+        with io.BytesIO(
+            b'00:00 log=2009020100gm-00a9-0000-00000000">',
+        ) as source:
+            db.insert_log_entries(
+                conn.cursor(),
+                iter_log_entries("scc.html", source),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(return_value=f"list([{{file:'{filename}',size:123}}]);"),
+    )
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_log_file_content",
+        Mock(return_value=gzip.compress(content)),
+    )
+    assert fetch_module.fetch(path, archive=False) == 0
+    conn = db.open_db(path)
+    try:
+        assert conn.execute(
+            "SELECT file, size FROM file_index",
+        ).fetchall() == [
+            (filename, 123),
+        ]
+        assert db.count_all_ids(conn.cursor()) == 1
+    finally:
+        conn.close()
+
+
+def test_fetch_retries_invalid_body_with_unchanged_file_index(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filename = "scc20250101.html.gz"
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(return_value=f"list([{{file:'{filename}',size:123}}]);"),
+    )
+    body_fetch = Mock(
+        side_effect=[
+            gzip.compress(b"<html>Service unavailable</html>"),
+            gzip.compress(b'00:00 log=2009020100gm-00a9-0000-00000000">\n'),
+        ],
+    )
+    monkeypatch.setattr(fetch_module, "fetch_log_file_content", body_fetch)
+    assert fetch_module.fetch(path, archive=False) == 0
+    conn = db.open_db(path)
+    try:
+        assert conn.execute("SELECT * FROM file_index").fetchall() == []
+        assert db.count_all_ids(conn.cursor()) == 0
+        db.update_fetch_attempt_time(
+            conn.cursor(),
+            fetch_module.FETCH_KIND_LATEST,
+            datetime.now(UTC)
+            - fetch_module.MIN_FETCH_INTERVAL
+            - timedelta(seconds=1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert fetch_module.fetch(path, archive=False) == 1
+    assert body_fetch.call_count == 2
+    conn = db.open_db(path)
+    try:
+        assert conn.execute(
+            "SELECT file, size FROM file_index",
+        ).fetchall() == [
+            (filename, 123),
+        ]
+        assert db.count_all_ids(conn.cursor()) == 1
     finally:
         conn.close()

@@ -1,6 +1,6 @@
 [project]
 name = "houou-logs"
-version = "2.1.2"
+version = "3.0.0b1"
 description = "Tools to download Houou (Phoenix) logs from tenhou.net"
 authors = [
     { name = "Apricot S." }
@@ -86,6 +86,9 @@ ignore-overlong-task-comments = true
 convention = "google"
 
 [tool.ruff.lint.extend-per-file-ignores]
+"./examples/*" = [
+    "INP001", # implicit-namespace-package
+]
 "./tests/*" = [
     "S101",    # assert
     "PLR2004", # magic-value-comparison

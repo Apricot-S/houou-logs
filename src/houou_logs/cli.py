@@ -8,14 +8,15 @@ import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 from argparse import ArgumentParser, Namespace
-from datetime import UTC, datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from gzip import BadGzipFile
 from pathlib import Path
 
 from niquests.exceptions import RequestException
 
 from houou_logs import download, export, fetch, import_, validate, yakuman
-from houou_logs.exceptions import UserInputError
+from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 
 SUCCESS_EXIT_CODE = 0
 IO_ERROR_EXIT_CODE = 1
@@ -74,12 +75,25 @@ def set_fetch_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
+def format_retry_delay(remaining: timedelta) -> str:
+    step = timedelta(seconds=10)
+    seconds = -(-remaining // step) * 10
+    minutes, seconds = divmod(seconds, 60)
+    parts = []
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds:
+        parts.append(f"{seconds}s")
+    return " ".join(parts)
+
+
 def fetch_cli(args: Namespace) -> None:
-    num_logs = fetch.fetch(args.db_path, archive=args.archive)
-    if num_logs == -1:
-        msg = "Skipping fetch: last fetch was within 20 minutes."
+    result = fetch.fetch(args.db_path, archive=args.archive)
+    if isinstance(result, timedelta):
+        delay = format_retry_delay(result)
+        msg = f"Please retry in approximately {delay}."
     else:
-        msg = f"Number of log entries inserted into the DB: {num_logs}"
+        msg = f"Number of log entries inserted into the DB: {result}"
     print(msg, file=sys.stderr)
 
 
@@ -233,39 +247,65 @@ def format_external_io_error(error: Exception) -> str:
 
 
 def build_parser() -> ArgumentParser:
-    parser = ArgumentParser()
+    parser = ArgumentParser(
+        description="Tools to download Houou (Phoenix) logs from tenhou.net",
+    )
     subparsers = parser.add_subparsers(required=True)
 
-    parser_import = subparsers.add_parser("import")
+    parser_import = subparsers.add_parser(
+        "import",
+        description="Import log IDs from a yearly archive file",
+        help="Import log IDs from a yearly archive file",
+    )
     parser_import = set_import_args(parser_import)
     parser_import.set_defaults(func=import_cli)
 
-    parser_fetch = subparsers.add_parser("fetch")
+    parser_fetch = subparsers.add_parser(
+        "fetch",
+        description="Fetch latest log IDs into the database",
+        help="Fetch latest log IDs into the database",
+    )
     parser_fetch = set_fetch_args(parser_fetch)
     parser_fetch.set_defaults(func=fetch_cli)
 
-    parser_yakuman = subparsers.add_parser("yakuman")
+    parser_yakuman = subparsers.add_parser(
+        "yakuman",
+        description="Fetch yakuman log IDs for a specific year and month",
+        help="Fetch yakuman log IDs for a specific year and month",
+    )
     parser_yakuman = set_yakuman_args(parser_yakuman)
     parser_yakuman.set_defaults(func=yakuman_cli)
 
-    parser_download = subparsers.add_parser("download")
+    parser_download = subparsers.add_parser(
+        "download",
+        description="Download log contents into the database",
+        help="Download log contents into the database",
+    )
     parser_download = set_download_args(parser_download)
     parser_download.set_defaults(func=download_cli)
 
-    parser_validate = subparsers.add_parser("validate")
+    parser_validate = subparsers.add_parser(
+        "validate",
+        description="Validate that downloaded logs can be parsed",
+        help="Validate that downloaded logs can be parsed",
+    )
     parser_validate = set_validate_args(parser_validate)
     parser_validate.set_defaults(func=validate_cli)
 
-    parser_export = subparsers.add_parser("export")
+    parser_export = subparsers.add_parser(
+        "export",
+        description="Export downloaded log contents as XML files",
+        help="Export downloaded log contents as XML files",
+    )
     parser_export = set_export_args(parser_export)
     parser_export.set_defaults(func=export_cli)
 
     return parser
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         args.func(args)
@@ -275,6 +315,9 @@ def main() -> int:
     except UserInputError as e:
         print(f"Error: {e}", file=sys.stderr)
         return USER_INPUT_ERROR_EXIT_CODE
+    except ExternalResponseParseError as e:
+        print(f"Response parse error: {e}", file=sys.stderr)
+        return IO_ERROR_EXIT_CODE
     except EXTERNAL_IO_ERRORS as e:
         print(format_external_io_error(e), file=sys.stderr)
         return IO_ERROR_EXIT_CODE

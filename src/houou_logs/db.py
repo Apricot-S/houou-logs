@@ -4,7 +4,7 @@
 
 import sqlite3
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,7 +33,7 @@ def setup_table(conn: sqlite3.Connection) -> None:
         create_fetch_state_table(conn)
         migrate_last_fetch_time_to_fetch_state(conn)
         create_file_index_table(conn)
-        create_logs_status_filter_index(conn)
+        create_logs_indexes(conn)
 
 
 def create_logs_table(conn: sqlite3.Connection) -> None:
@@ -114,13 +114,20 @@ def create_logs_status_filter_index(conn: sqlite3.Connection) -> None:
     )
 
 
+def create_logs_indexes(conn: sqlite3.Connection) -> None:
+    create_logs_status_filter_index(conn)
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_logs_status_id
+        ON logs (is_processed, was_error, id, num_players, is_tonpu);
+        """,
+    )
+
+
 def insert_log_entries(
     cursor: sqlite3.Cursor,
-    entries: list[LogEntry],
-) -> None:
-    if not entries:
-        return
-
+    entries: Iterable[LogEntry],
+) -> int:
     values = (
         (
             entry.id,
@@ -142,17 +149,15 @@ def insert_log_entries(
         """,  # noqa: E501
         values,
     )
+    return cursor.rowcount
 
 
-def list_undownloaded_log_ids_after(
-    cursor: sqlite3.Cursor,
+def _build_log_filter_conditions(
     players: int | None,
     length: str | None,
-    after_id: str | None,
-    limit: int,
-) -> list[str]:
-    conditions = ["is_processed = 0", "was_error = 0"]
-    params: list = []
+) -> tuple[list[str], list[int | str]]:
+    conditions: list[str] = []
+    params: list[int | str] = []
 
     if players is not None:
         conditions.append("num_players = ?")
@@ -167,6 +172,19 @@ def list_undownloaded_log_ids_after(
             case _:
                 msg = f"unknown length: {length}"
                 raise ValueError(msg)
+
+    return conditions, params
+
+
+def list_undownloaded_log_ids_after(
+    cursor: sqlite3.Cursor,
+    players: int | None,
+    length: str | None,
+    after_id: str | None,
+    limit: int,
+) -> list[str]:
+    filter_conditions, params = _build_log_filter_conditions(players, length)
+    conditions = ["is_processed = 0", "was_error = 0", *filter_conditions]
 
     if after_id is not None:
         conditions.append("id > ?")
@@ -191,22 +209,8 @@ def count_undownloaded_log_ids(
     length: str | None,
     limit: int | None,
 ) -> int:
-    conditions = ["is_processed = 0", "was_error = 0"]
-    params: list = []
-
-    if players is not None:
-        conditions.append("num_players = ?")
-        params.append(players)
-
-    if length is not None:
-        match length:
-            case "t":
-                conditions.append("is_tonpu = 1")
-            case "h":
-                conditions.append("is_tonpu = 0")
-            case _:
-                msg = f"unknown length: {length}"
-                raise ValueError(msg)
+    filter_conditions, params = _build_log_filter_conditions(players, length)
+    conditions = ["is_processed = 0", "was_error = 0", *filter_conditions]
 
     sql = f"""
         SELECT COUNT(*)
@@ -214,11 +218,20 @@ def count_undownloaded_log_ids(
         WHERE {" AND ".join(conditions)}
         """  # noqa: S608
 
-    cursor.execute(sql, params)
-    count = cursor.fetchone()[0]
     if limit is not None:
-        return min(count, limit)
-    return count
+        sql = f"""
+            SELECT COUNT(*)
+            FROM (
+                SELECT 1
+                FROM logs
+                WHERE {" AND ".join(conditions)}
+                LIMIT ?
+            )
+            """  # noqa: S608
+        params.append(limit)
+
+    cursor.execute(sql, params)
+    return cursor.fetchone()[0]
 
 
 def update_log_entries(
@@ -250,51 +263,32 @@ def count_all_log_contents(cursor: sqlite3.Cursor) -> int:
     return cursor.fetchone()[0]
 
 
-def list_all_processed_log_ids_after(
+def iter_processed_log_contents_after(
     cursor: sqlite3.Cursor,
     after_id: str | None,
     limit: int,
-) -> list[str]:
+) -> Generator[tuple[str, bytes | None]]:
+    # Consume the query before updating rows in its status index.
     if after_id is None:
-        cursor.execute(
-            """
-            SELECT id
-            FROM logs
-            WHERE is_processed = 1
-            ORDER BY id ASC
-            LIMIT ?;
-            """,
-            (limit,),
-        )
+        after_condition = ""
+        params = (limit,)
     else:
-        cursor.execute(
-            """
-            SELECT id
-            FROM logs
-            WHERE is_processed = 1
-                AND id > ?
-            ORDER BY id ASC
-            LIMIT ?;
-            """,
-            (after_id, limit),
-        )
-
-    return [row[0] for row in cursor.fetchall()]
-
-
-def get_log_content(cursor: sqlite3.Cursor, log_id: str) -> bytes | None:
+        after_condition = " AND id > ?"
+        params = (after_id, after_id, limit)
+    # Merge status-index scans in ID order without sorting BLOBs.
     cursor.execute(
-        """
-        SELECT log
-        FROM logs
-        WHERE id = ?;
-        """,
-        (log_id,),
+        f"""
+        SELECT id, log FROM logs
+        WHERE is_processed = 1 AND was_error = 0{after_condition}
+        UNION ALL
+        SELECT id, log FROM logs
+        WHERE is_processed = 1 AND was_error = 1{after_condition}
+        ORDER BY id ASC
+        LIMIT ?;
+        """,  # noqa: S608
+        params,
     )
-    row = cursor.fetchone()
-    if row is None:
-        return None
-    return row[0]
+    yield from cursor
 
 
 def iter_log_contents(
@@ -303,23 +297,9 @@ def iter_log_contents(
     length: str | None,
     limit: int | None,
     offset: int,
-) -> Iterator[tuple[str, bytes]]:
-    conditions = ["is_processed = 1", "was_error = 0"]
-    params: list = []
-
-    if players is not None:
-        conditions.append("num_players = ?")
-        params.append(players)
-
-    if length is not None:
-        match length:
-            case "t":
-                conditions.append("is_tonpu = 1")
-            case "h":
-                conditions.append("is_tonpu = 0")
-            case _:
-                msg = f"unknown length: {length}"
-                raise ValueError(msg)
+) -> Generator[tuple[str, bytes]]:
+    filter_conditions, params = _build_log_filter_conditions(players, length)
+    conditions = ["is_processed = 1", "was_error = 0", *filter_conditions]
 
     sql = f"""
         SELECT id, log
@@ -343,22 +323,8 @@ def count_log_contents(
     limit: int | None,
     offset: int,
 ) -> int:
-    conditions = ["is_processed = 1", "was_error = 0"]
-    params: list = []
-
-    if players is not None:
-        conditions.append("num_players = ?")
-        params.append(players)
-
-    if length is not None:
-        match length:
-            case "t":
-                conditions.append("is_tonpu = 1")
-            case "h":
-                conditions.append("is_tonpu = 0")
-            case _:
-                msg = f"unknown length: {length}"
-                raise ValueError(msg)
+    filter_conditions, params = _build_log_filter_conditions(players, length)
+    conditions = ["is_processed = 1", "was_error = 0", *filter_conditions]
 
     sql = f"""
         SELECT COUNT(*)
@@ -366,16 +332,21 @@ def count_log_contents(
         WHERE {" AND ".join(conditions)}
         """  # noqa: S608
 
-    cursor.execute(sql, params)
-    count = cursor.fetchone()[0]
-
-    if offset > 0:
-        count = max(count - offset, 0)
-
     if limit is not None:
-        return min(count, limit)
+        # Ordering does not affect the page's row count.
+        sql = f"""
+            SELECT COUNT(*)
+            FROM (
+                SELECT 1
+                FROM logs
+                WHERE {" AND ".join(conditions)}
+                LIMIT ? OFFSET ?
+            )
+            """  # noqa: S608
+        params.extend([limit, offset])
 
-    return count
+    cursor.execute(sql, params)
+    return cursor.fetchone()[0]
 
 
 def count_all_ids(cursor: sqlite3.Cursor) -> int:
@@ -383,13 +354,13 @@ def count_all_ids(cursor: sqlite3.Cursor) -> int:
     return cursor.fetchone()[0]
 
 
-def reset_log_content(cursor: sqlite3.Cursor, log_id: str) -> None:
-    cursor.execute(
+def reset_log_contents(cursor: sqlite3.Cursor, log_ids: Iterable[str]) -> None:
+    cursor.executemany(
         """
         UPDATE logs SET is_processed = 0, was_error = 0, log = NULL
         WHERE id = ?;
         """,
-        (log_id,),
+        ((log_id,) for log_id in log_ids),
     )
 
 

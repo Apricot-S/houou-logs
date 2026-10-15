@@ -273,7 +273,7 @@ def test_insert_log_entries() -> None:
             ),
         ]
 
-        db.insert_log_entries(cursor, entries)
+        assert db.insert_log_entries(cursor, entries) == 2
         conn.commit()
 
         cursor.execute("SELECT * FROM logs;")
@@ -312,7 +312,7 @@ def test_insert_log_entries_keeps_existing_row_on_conflict() -> None:
             was_error=True,
             log=None,
         )
-        db.insert_log_entries(cursor, [refreshed_entry])
+        assert db.insert_log_entries(cursor, [refreshed_entry]) == 0
         conn.commit()
 
         cursor.execute("SELECT * FROM logs WHERE id = ?;", (log_id,))
@@ -486,7 +486,7 @@ def test_count_all_ids(conn_test_db: sqlite3.Connection) -> None:
     assert actual == 4
 
 
-def test_reset_log_content() -> None:
+def test_reset_log_contents() -> None:
     conn = db.open_db(":memory:")
 
     try:
@@ -507,7 +507,7 @@ def test_reset_log_content() -> None:
         db.update_log_entries(cursor, entry.id, True, b"sample")  # noqa: FBT003
         conn.commit()
 
-        db.reset_log_content(cursor, log_id)
+        db.reset_log_contents(cursor, [log_id])
 
         cursor.execute("SELECT * FROM logs;")
         expected = (

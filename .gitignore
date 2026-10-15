@@ -253,3 +253,7 @@ uv.lock
 
 db/
 xml/
+
+# Local input and output for parsing examples
+/examples/*.xml
+/examples/*.json

@@ -37,9 +37,23 @@ houou-logs$ uv tool install .
 
 ## Usage
 
+> [!NOTE]
+> Databases created with houou-logs **2.1.2 or earlier** are migrated
+> automatically the first time any command is run with this version.
+> Missing log indexes are added while existing indexes and log data are
+> preserved. No reimport is needed.
+>
+> Creating indexes requires additional disk space and may take some time.
+
 ### Import log IDs from an archive (per year)
 
 Import a list of log IDs into the database.
+
+Each list file inside the ZIP archive is committed after it has been fully
+read and inserted. If a file fails, its pending changes are rolled back and
+the command stops; previously completed files remain saved. You can rerun
+the same archive: existing log IDs are ignored. Invalid IDs are reported and
+skipped. Import does not update the FileIndex used by `fetch`.
 
 > [!NOTE]
 >
@@ -158,7 +172,9 @@ Validate that all downloaded mjlog XML in the database can be parsed correctly.
 If an invalid or unreadable log is found, this command resets that log entry to the undownloaded state.
 This allows a later `download` run to fetch it again.
 
-In addition to validation, this command also serves as a practical example of how to parse mjlog XML at the tag level.
+Resets are saved after each batch of up to 1,000 entries has been validated.
+If validation is interrupted or fails, resets from completed batches remain
+saved; the current batch and unchecked entries remain unchanged.
 
 ```sh
 houou-logs validate <db-path>

@@ -3,44 +3,37 @@
 # This file is part of https://github.com/Apricot-S/houou-logs
 
 import gzip
+import re
 import sqlite3
+import zlib
 from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
 import niquests
 from niquests import Session
+from niquests.exceptions import RequestException
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.exceptions import UserInputError
+from houou_logs.exceptions import LogFetchError
+from houou_logs.input_validation import (
+    validate_db_path,
+    validate_length,
+    validate_limit,
+    validate_players,
+)
 from houou_logs.session import TIMEOUT, create_session
 
 DOWNLOAD_BATCH_SIZE = 1000
 
-
-def validate_db_path(db_path: Path) -> None:
-    if not db_path.is_file():
-        msg = f"database file is not found: {db_path}"
-        raise UserInputError(msg)
-
-
-def validate_players(players: int) -> None:
-    if players not in (4, 3):
-        msg = f"invalid number of players: {players}"
-        raise UserInputError(msg)
-
-
-def validate_length(length: str) -> None:
-    if length not in ("t", "h"):
-        msg = f"invalid length of game: {length}"
-        raise UserInputError(msg)
-
-
-def validate_limit(limit: int) -> None:
-    if limit <= 0:
-        msg = f"invalid limit of download: {limit}"
-        raise UserInputError(msg)
+# Identify the root's opening tag. Tenhou logs can contain malformed
+# XML, such as unescaped attribute values. Leave validation to validate.
+_LOG_PREFIX = re.compile(
+    rb"\A(?:\xef\xbb\xbf)?[ \t\r\n]*"
+    rb"(?:<\?xml[ \t\r\n][\s\S]*?\?>[ \t\r\n]*)?"
+    rb"<mjloggm(?=[ \t\r\n/>])",
+)
 
 
 def build_url(log_id: str) -> str:
@@ -51,21 +44,16 @@ def fetch_log_content(session: Session, url: str) -> bytes:
     resp = session.get(url, timeout=TIMEOUT)
     if resp.status_code != niquests.codes["ok"]:
         msg = f"failed to fetch: HTTP {resp.status_code}"
-        raise RuntimeError(msg)
-
-    text = resp.text
-    if text is None:
-        msg = "response text is None (failed to decode or empty response)"
-        raise RuntimeError(msg)
-
-    if "mjlog" not in text:
-        msg = "no log content in response"
-        raise RuntimeError(msg)
+        raise LogFetchError(msg)
 
     content = resp.content
     if content is None:
         msg = "content could not be retrieved"
-        raise RuntimeError(msg)
+        raise LogFetchError(msg)
+
+    if _LOG_PREFIX.match(content) is None:
+        msg = "no log content in response"
+        raise LogFetchError(msg)
 
     return content
 
@@ -78,7 +66,7 @@ def fetch_log_content_for_download(
 
     try:
         content = fetch_log_content(session, url)
-    except Exception as e:  # noqa: BLE001
+    except (RequestException, LogFetchError, UnicodeDecodeError) as e:
         tqdm.write(f"{log_id}: {e}")
         return (True, b"")
 
@@ -91,7 +79,7 @@ def compress_log_content(
 ) -> tuple[bool, bytes | None]:
     try:
         return (False, gzip.compress(content))
-    except Exception as e:  # noqa: BLE001
+    except (OSError, zlib.error) as e:
         tqdm.write(f"{log_id}: failed to compress: {e}")
         return (True, None)
 
@@ -141,6 +129,8 @@ def download(
 
     num_logs = 0
     with closing(db.open_db(db_path)) as conn, conn:
+        db.create_logs_indexes(conn)
+        conn.commit()
         cursor = conn.cursor()
 
         with create_session() as session:
