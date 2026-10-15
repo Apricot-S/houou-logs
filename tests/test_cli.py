@@ -704,6 +704,7 @@ def test_main_fetch_rejects_invalid_index_before_downloading(
     "content",
     [
         None,
+        b"",
         b"\xff",
         b"not gzip",
         gzip.compress(b"<html>Service unavailable</html>"),

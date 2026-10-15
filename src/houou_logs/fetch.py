@@ -73,6 +73,9 @@ def fetch_log_file_content(session: niquests.Session, url: str) -> bytes:
     if content is None:
         msg = "response content is None"
         raise ExternalResponseParseError(msg)
+    if not content:
+        msg = "response content is empty"
+        raise ExternalResponseParseError(msg)
 
     return content
 

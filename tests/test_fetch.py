@@ -668,9 +668,14 @@ def test_fetch_records_valid_list_with_no_new_ids(
         conn.close()
 
 
+@pytest.mark.parametrize(
+    "invalid_content",
+    [b"", gzip.compress(b"<html>Service unavailable</html>")],
+)
 def test_fetch_retries_invalid_body_with_unchanged_file_index(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    invalid_content: bytes,
 ) -> None:
     path = tmp_path / "fetch.db"
     filename = "scc20250101.html.gz"
@@ -681,11 +686,22 @@ def test_fetch_retries_invalid_body_with_unchanged_file_index(
     )
     body_fetch = Mock(
         side_effect=[
-            gzip.compress(b"<html>Service unavailable</html>"),
-            gzip.compress(b'00:00 log=2009020100gm-00a9-0000-00000000">\n'),
+            Mock(content=invalid_content),
+            Mock(
+                content=gzip.compress(
+                    b'00:00 log=2009020100gm-00a9-0000-00000000">\n',
+                ),
+            ),
         ],
     )
-    monkeypatch.setattr(fetch_module, "fetch_log_file_content", body_fetch)
+    session = Mock()
+    session.__enter__ = Mock(return_value=Mock(get=body_fetch))
+    session.__exit__ = Mock(return_value=False)
+    monkeypatch.setattr(
+        fetch_module,
+        "create_session",
+        Mock(return_value=session),
+    )
     assert fetch_module.fetch(path, archive=False) == 0
     conn = db.open_db(path)
     try:
