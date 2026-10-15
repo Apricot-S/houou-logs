@@ -96,7 +96,7 @@ def parse_file_index(response: str) -> dict[str, int]:
     if any(size <= 0 for size in file_index.values()):
         msg = "file index size must be positive"
         raise ExternalResponseParseError(msg)
-    if any(size > 2**63 - 1 for size in file_index.values()):
+    if any(size > db.SQLITE_INTEGER_MAX for size in file_index.values()):
         msg = "file index size exceeds the supported range"
         raise ExternalResponseParseError(msg)
     return file_index

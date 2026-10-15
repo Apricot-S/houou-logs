@@ -358,6 +358,7 @@ def test_main_rejects_missing_database(
         ("--length", "x", "invalid length of game: x"),
         ("--limit", "0", "invalid limit: 0"),
         ("--limit", "-1", "invalid limit: -1"),
+        ("--limit", str(2**63), f"invalid limit: {2**63}"),
     ],
 )
 def test_main_rejects_invalid_common_options_before_database_access(
@@ -384,6 +385,60 @@ def test_main_rejects_invalid_common_options_before_database_access(
     assert captured.out == ""
     assert captured.err == f"Error: {message}\n"
     assert not output_dir.exists()
+
+
+@pytest.mark.parametrize("limit", [None, 1])
+@pytest.mark.parametrize("offset", [-1, 2**63, 2**64])
+def test_main_rejects_invalid_offset_before_database_access(
+    limit: int | None,
+    offset: int,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "db.sqlite"
+    db_path.touch()
+    output_dir = tmp_path / "xml"
+    argv = ["export", str(db_path), str(output_dir), "--offset", str(offset)]
+    if limit is not None:
+        argv.extend(["--limit", str(limit)])
+
+    with patch("houou_logs.db.open_db") as mock_open_db:
+        assert main(argv) == USER_INPUT_ERROR_EXIT_CODE
+        mock_open_db.assert_not_called()
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: invalid offset of export: {offset}\n"
+    assert not output_dir.exists()
+
+
+@pytest.mark.parametrize(
+    ("command", "options"),
+    [
+        ("download", ["--limit", str(2**63 - 1)]),
+        ("export", ["--limit", str(2**63 - 1)]),
+        ("export", ["--limit", "1", "--offset", str(2**63 - 1)]),
+    ],
+)
+def test_main_accepts_sqlite_integer_upper_bound(
+    command: str,
+    options: list[str],
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "db.sqlite"
+    conn = db.open_db(db_path)
+    try:
+        db.setup_table(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    argv = [command, str(db_path)]
+    if command == "export":
+        argv.append(str(tmp_path / "xml"))
+    argv.extend(options)
+
+    with patch("houou_logs.download.create_session"):
+        assert main(argv) == SUCCESS_EXIT_CODE
 
 
 @patch("houou_logs.fetch.fetch")
