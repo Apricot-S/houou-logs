@@ -23,7 +23,7 @@ from houou_logs.input_validation import (
 
 
 def validate_offset(offset: int) -> None:
-    if offset < 0:
+    if not 0 <= offset <= db.SQLITE_INTEGER_MAX:
         msg = f"invalid offset of export: {offset}"
         raise UserInputError(msg)
 

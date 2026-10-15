@@ -4,6 +4,7 @@
 
 from pathlib import Path
 
+from houou_logs.db import SQLITE_INTEGER_MAX
 from houou_logs.exceptions import UserInputError
 
 
@@ -26,6 +27,6 @@ def validate_length(length: str) -> None:
 
 
 def validate_limit(limit: int) -> None:
-    if limit <= 0:
+    if not 1 <= limit <= SQLITE_INTEGER_MAX:
         msg = f"invalid limit: {limit}"
         raise UserInputError(msg)
