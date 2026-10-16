@@ -103,6 +103,53 @@ sw();
     assert list(iter_ids(text)) == ids
 
 
+@pytest.mark.parametrize(
+    "name_literal",
+    [
+        "'name];'",
+        '"name];"',
+        r"'name\'];[still quoted'",
+        r'"name\"];[still quoted"',
+        r"'name\\'",
+        r"'name\\\'];[still quoted'",
+        "'name[[]];'",
+    ],
+)
+@pytest.mark.parametrize("old_format", [False, True])
+def test_iter_ids_delimiters_in_strings(
+    name_literal: str,
+    *,
+    old_format: bool,
+) -> None:
+    log_id = "2025010100gm-00a9-0000-00000000"
+    entry = (
+        f"'01/01 00:00',{name_literal},[[1, [2]], 'nested];'],[], '{log_id}'"
+    )
+    array = f"[[{entry}]]" if old_format else f"[{entry}]"
+    text = f"ykm={array};\nsw();"
+    assert list(iter_ids(text)) == [("01/01 00:00", log_id)]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ykm=['unterminated];",
+        'ykm=["unterminated];',
+        "ykm=['trailing escape\\",
+        "ykm=[[1];",
+        "ykm=[",
+        "ykm=[]",
+        "ykm=[] extra;",
+    ],
+)
+def test_iter_ids_rejects_unterminated_array(text: str) -> None:
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse ykm array",
+    ):
+        list(iter_ids(text))
+
+
 def test_iter_ids_new_format_empty() -> None:
     text = """total=580570;
 updated="2025/02/01 00:12";
