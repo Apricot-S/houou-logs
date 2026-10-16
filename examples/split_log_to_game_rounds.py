@@ -26,12 +26,12 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
         if game_ended:
             # After game end, only connection-related tags (UN/BYE)
             # are allowed.
-            if tagname not in ("UN", "BYE"):
+            if tagname not in {"UN", "BYE"}:
                 msg = f"unexpected element <{tagname}> after game end"
                 raise ValueError(msg)
             continue
 
-        if tagname in ("SHUFFLE", "TAIKYOKU", "GO"):
+        if tagname in {"SHUFFLE", "TAIKYOKU", "GO"}:
             # Skip tags that are not part of round content
             continue
 
@@ -46,14 +46,14 @@ def split_log_to_game_rounds(log_content: str) -> list[list[str]]:
             elem.attrib.pop("shuffle", None)
 
         elif not current_round:
-            if tagname in ("UN", "BYE"):
+            if tagname in {"UN", "BYE"}:
                 # Before the first INIT, participant and connection
                 # information does not belong to a round.
                 continue
             msg = f"unexpected element <{tagname}> before first INIT"
             raise ValueError(msg)
 
-        if tagname in ("AGARI", "RYUUKYOKU") and "owari" in elem.attrib:
+        if tagname in {"AGARI", "RYUUKYOKU"} and "owari" in elem.attrib:
             # Game ends when 'owari' attribute is present.
             current_round.append(ET.tostring(elem, encoding="unicode"))
             rounds.append(current_round)
