@@ -17,6 +17,18 @@ python examples/split_log_to_game_rounds.py path/to/log.xml
 ```
 
 The script prints a JSON list of rounds, each containing XML strings.
-`INIT` starts a round; `AGARI` or `RYUUKYOKU` with an `owari` attribute
-ends the game. Metadata tags are skipped and legacy `shuffle` attributes
-on `INIT` are removed.
+
+- Every returned round starts with `INIT`. Multiple `AGARI` elements
+  (for example, a double ron) stay in the same round until the next `INIT`.
+- `AGARI` or `RYUUKYOKU` with an `owari` attribute ends the game.
+- Metadata tags (`SHUFFLE`, `GO`, `TAIKYOKU`) are skipped, and legacy
+  `shuffle` attributes on `INIT` are removed.
+- Participant and connection tags (`UN` / `BYE`) before the first `INIT`
+  are omitted. Within a round, they are preserved in their original order.
+- After game end, `UN` / `BYE` are allowed but omitted; other tags are
+  rejected.
+- Round events before the first `INIT` and logs without a final `owari`
+  are rejected.
+
+This example splits rounds; it does not fully validate mahjong rules or
+every event sequence.
