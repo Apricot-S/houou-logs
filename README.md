@@ -89,13 +89,14 @@ If the same mode is executed again within 20 minutes, the command exits without 
 
 A failed FileIndex request is still recorded as an attempt, so repeated automated runs do not immediately retry against Tenhou.
 
-When a list file request fails with HTTP 408, 429, 5xx, or a network error,
-fetch stops without automatic retries. Any `Retry-After` header is displayed
-as supplied (seconds or an HTTP date); use it as a guide for when to retry.
-Successfully imported files remain committed, and failed or unprocessed files
-remain eligible for a later run, subject to the same 20-minute interval.
-Other HTTP errors (such as 404) and invalid list file contents are reported
-per file and processing continues. Requests keep the usual minimum interval.
+List file request failures are handled as follows:
+
+- HTTP 408, 429, 5xx, or network errors stop fetching without automatic retries.
+- Other HTTP errors (such as 404) and invalid list file contents are reported per file, and processing continues.
+
+Any `Retry-After` header is displayed as supplied (seconds or an HTTP date); use it as a guide for when to retry.
+
+Successfully imported files remain committed. Failed or unprocessed files remain eligible for a later run, subject to the same 20-minute interval.
 
 #### Fetch log IDs from the latest 7 days (default mode)
 
