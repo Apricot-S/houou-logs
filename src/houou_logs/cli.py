@@ -157,19 +157,30 @@ def set_download_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--limit",
         type=int,
-        help="Max number of logs to download. If omitted, all available logs are downloaded.",  # noqa: E501
+        help="Max number of logs to process, including failures. If omitted, all available logs are processed.",  # noqa: E501
     )
     return parser
 
 
-def download_cli(args: Namespace) -> None:
-    num_logs = download.download(
+def download_cli(args: Namespace) -> int:
+    result = download.download(
         args.db_path,
         args.players,
         args.length,
         args.limit,
     )
-    print(f"Number of logs downloaded: {num_logs}", file=sys.stderr)
+    print(f"Number of logs processed: {result.num_processed}", file=sys.stderr)
+    print(
+        f"Number of logs downloaded: {result.num_succeeded}",
+        file=sys.stderr,
+    )
+    print(f"Number of logs failed: {result.num_failed}", file=sys.stderr)
+
+    if result.stopped:
+        print("Download stopped due to a temporary error.", file=sys.stderr)
+    if result.num_failed or result.stopped:
+        return IO_ERROR_EXIT_CODE
+    return SUCCESS_EXIT_CODE
 
 
 def set_validate_args(parser: ArgumentParser) -> ArgumentParser:
@@ -309,7 +320,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        args.func(args)
+        exit_code = args.func(args)
     except KeyboardInterrupt:
         print("Interrupted by user.", file=sys.stderr)
         return INTERRUPTED_EXIT_CODE
@@ -323,7 +334,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(format_external_io_error(e), file=sys.stderr)
         return IO_ERROR_EXIT_CODE
     else:
-        return SUCCESS_EXIT_CODE
+        return SUCCESS_EXIT_CODE if exit_code is None else exit_code
 
 
 if __name__ == "__main__":

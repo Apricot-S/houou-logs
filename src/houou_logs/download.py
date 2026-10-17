@@ -8,6 +8,7 @@ import sqlite3
 import zlib
 from collections.abc import Iterator
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 
 import niquests
@@ -35,6 +36,17 @@ _LOG_PREFIX = re.compile(
     rb"(?:<\?xml[ \t\r\n][\s\S]*?\?>[ \t\r\n]*)?"
     rb"<mjloggm(?=[ \t\r\n/>])",
 )
+
+
+@dataclass
+class DownloadResult:
+    num_succeeded: int = 0
+    num_failed: int = 0
+    stopped: bool = False
+
+    @property
+    def num_processed(self) -> int:
+        return self.num_succeeded + self.num_failed
 
 
 def build_url(log_id: str) -> str:
@@ -130,7 +142,7 @@ def download(
     players: int | None,
     length: str | None,
     limit: int | None,
-) -> int:
+) -> DownloadResult:
     validate_db_path(db_path)
     if players is not None:
         validate_players(players)
@@ -139,7 +151,7 @@ def download(
     if limit is not None:
         validate_limit(limit)
 
-    num_logs = 0
+    result = DownloadResult()
     with closing(db.open_db(db_path)) as conn, conn:
         db.create_logs_indexes(conn)
         conn.commit()
@@ -172,7 +184,8 @@ def download(
                                 "Pending logs remain unprocessed; "
                                 "run download again later to resume.",
                             )
-                            return num_logs
+                            result.stopped = True
+                            return result
 
                         compressed_content = None
                         if not was_error:
@@ -186,9 +199,11 @@ def download(
                             was_error,
                             compressed_content,
                         )
-                        num_logs += 1
+                        conn.commit()
+                        if was_error:
+                            result.num_failed += 1
+                        else:
+                            result.num_succeeded += 1
                         progress.update(1)
 
-                        conn.commit()
-
-    return num_logs
+    return result
