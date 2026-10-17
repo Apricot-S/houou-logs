@@ -8,11 +8,12 @@ import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from niquests import Response, Session
-from niquests.exceptions import HTTPError
+from niquests.exceptions import ConnectionError as NiquestsConnectionError
+from niquests.exceptions import HTTPError, Timeout
 
 from houou_logs import db
 from houou_logs import fetch as fetch_module
@@ -57,7 +58,9 @@ def test_fetch_continues_after_file_errors_and_retries_only_failed_files(
     elif failure == "truncated":
         invalid = contents[1][:-4]
     else:
-        invalid = HTTPError("503 Service unavailable")
+        response = Response()
+        response.status_code = 404
+        invalid = HTTPError("404 Not Found", response=response)
     index = (
         "list(["
         + ",".join(f"{{file:'{filename}',size:123}}" for filename in filenames)
@@ -727,5 +730,108 @@ def test_fetch_retries_invalid_body_with_unchanged_file_index(
             (filename, 123),
         ]
         assert db.count_all_ids(conn.cursor()) == 1
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("archive", [False, True])
+@pytest.mark.parametrize(
+    "failure",
+    [408, 429, 500, 503, 599, "connection", "timeout"],
+)
+@pytest.mark.parametrize(
+    "retry_after",
+    ["3600", "Wed, 21 Oct 2026 07:28:00 GMT"],
+)
+def test_fetch_stops_and_resumes_after_temporary_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: int | str,
+    retry_after: str,
+    *,
+    archive: bool,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filenames = [f"scc2025010{i}.html.gz" for i in range(1, 4)]
+    contents = [
+        gzip.compress(
+            f'00:00 log=2025010{i}00gm-00a9-0000-00000000">\n'.encode(),
+        )
+        for i in range(1, 4)
+    ]
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(
+            return_value="list(["
+            + ",".join(f"{{file:'{name}',size:123}}" for name in filenames)
+            + "]);",
+        ),
+    )
+    responses = []
+    for content in contents:
+        response = Response()
+        response.status_code = 200
+        response._content = content  # noqa: SLF001
+        responses.append(response)
+    error: Exception
+    if isinstance(failure, int):
+        response = Response()
+        response.status_code = failure
+        response.headers["Retry-After"] = retry_after
+        error = HTTPError(f"HTTP {failure}", response=response)
+    elif failure == "connection":
+        error = NiquestsConnectionError("connection failed")
+    else:
+        error = Timeout("request timed out")
+    session = Mock(spec_set=Session)
+    session.get.side_effect = [responses[0], error, *responses[1:]]
+    factory = MagicMock()
+    factory.return_value.__enter__.return_value = session
+    monkeypatch.setattr(fetch_module, "create_session", factory)
+    kind = (
+        fetch_module.FETCH_KIND_ARCHIVE
+        if archive
+        else fetch_module.FETCH_KIND_LATEST
+    )
+
+    assert fetch_module.fetch(path, archive=archive) == 1
+    assert session.get.call_count == 2
+    output = capsys.readouterr().out
+    assert "fetch stopped" in output
+    assert "run fetch again later" in output
+    if isinstance(failure, int):
+        assert f"Retry-After: {retry_after}" in output
+    conn = db.open_db(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 1
+        assert conn.execute(
+            "SELECT file, size FROM file_index",
+        ).fetchall() == [
+            (filenames[0], 123),
+        ]
+        assert isinstance(fetch_module.fetch(path, archive=archive), timedelta)
+        assert session.get.call_count == 2
+        db.update_fetch_attempt_time(
+            conn.cursor(),
+            kind,
+            datetime.now(UTC)
+            - fetch_module.MIN_FETCH_INTERVAL
+            - timedelta(seconds=1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert fetch_module.fetch(path, archive=archive) == 2
+    assert [call.args[0] for call in session.get.call_args_list[2:]] == [
+        f"{fetch_module.LOG_DOWNLOAD_URL}{name}" for name in filenames[1:]
+    ]
+    conn = db.open_db(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 3
+        assert dict(conn.execute("SELECT file, size FROM file_index")) == (
+            dict.fromkeys(filenames, 123)
+        )
     finally:
         conn.close()
