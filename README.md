@@ -139,7 +139,11 @@ Download the log contents (mjlog) into the database using previously fetched log
 
 This command skips logs that are already downloaded and stored, and only fetches log contents for undownloaded IDs that match the specified conditions.
 
-If a log cannot be downloaded, the entry is still marked as processed with an error flag.
+On HTTP 408, 429, or any 5xx response, or a network error, downloading stops immediately without automatic retries.
+The affected ID and remaining IDs stay unprocessed, so a later `download` run can resume. Previously saved logs are preserved.
+If the server sends `Retry-After` (seconds or an HTTP date), it is displayed; wait until that time before restarting.
+
+For other failures, such as HTTP 404 or a response without log content, the entry is marked as processed with an error flag and downloading continues.
 Such entries are skipped by later `download` runs unless they are reset to the undownloaded state.
 
 ```sh
