@@ -49,12 +49,12 @@ def test_validate_length_rejects_invalid_mode(length: str) -> None:
         validate_length(length)
 
 
-@pytest.mark.parametrize("limit", [1, 100])
+@pytest.mark.parametrize("limit", [1, 100, 2**63 - 1])
 def test_validate_limit_accepts_valid_counts(limit: int) -> None:
     validate_limit(limit)
 
 
-@pytest.mark.parametrize("limit", [0, -1])
+@pytest.mark.parametrize("limit", [0, -1, 2**63, 2**64])
 def test_validate_limit_rejects_out_of_range(limit: int) -> None:
     with pytest.raises(UserInputError):
         validate_limit(limit)

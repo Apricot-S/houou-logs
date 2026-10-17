@@ -15,14 +15,15 @@ from houou_logs.exceptions import UserInputError
 from houou_logs.export import export, validate_offset
 
 
-@pytest.mark.parametrize("offset", [0, 1])
+@pytest.mark.parametrize("offset", [0, 1, 2**63 - 1])
 def test_validate_offset_accepts_valid_counts(offset: int) -> None:
     validate_offset(offset)
 
 
-def test_validate_offset_rejects_out_of_range() -> None:
+@pytest.mark.parametrize("offset", [-1, 2**63, 2**64])
+def test_validate_offset_rejects_out_of_range(offset: int) -> None:
     with pytest.raises(UserInputError):
-        validate_offset(-1)
+        validate_offset(offset)
 
 
 def test_export_writes_utf8_and_overwrites_existing_file(

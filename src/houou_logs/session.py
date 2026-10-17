@@ -25,11 +25,9 @@ class TenhouSession(niquests.Session):
         self._last_request_started_at: float | None = None
 
     @override
-    def request(
+    def send(
         self,
-        method: str,
-        url: str,
-        *args,
+        request: niquests.PreparedRequest,
         **kwargs,
     ) -> niquests.Response:
         if self._last_request_started_at is not None:
@@ -40,7 +38,7 @@ class TenhouSession(niquests.Session):
                 sleep(remaining)
 
         self._last_request_started_at = monotonic()
-        return super().request(method, url, *args, **kwargs)
+        return super().send(request, **kwargs)
 
 
 def create_session() -> niquests.Session:

@@ -6,7 +6,7 @@ import ast
 import re
 from collections.abc import Iterable, Iterator
 from contextlib import closing
-from datetime import MAXYEAR, MINYEAR, UTC, datetime
+from datetime import MAXYEAR, MINYEAR, datetime, timedelta, timezone
 from pathlib import Path
 
 from niquests import Session
@@ -17,9 +17,10 @@ from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 from houou_logs.log_id import parse_date, parse_type
 from houou_logs.session import TIMEOUT, create_session
 
-YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
+JST = timezone(timedelta(hours=9))
+YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=JST)
 
-YKM_ARRAY_PATTERN = re.compile(r"ykm=(\[.*?\]);", re.DOTALL)
+YKM_ARRAY_START_PATTERN = re.compile(r"ykm=(?=\[)")
 YAKUMAN_LOG_DATE_PATTERN = re.compile(r"^\d{2}/\d{2} \d{2}:\d{2}$")
 YAKUMAN_LOG_ID_PATTERN = re.compile(
     r"^\d{8}(?:\d{2})?gm-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{8}$",
@@ -35,13 +36,14 @@ def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
         msg = f"year must be between {MINYEAR} and {MAXYEAR}"
         raise UserInputError(msg)
 
-    target_date = datetime(year, month, 1, tzinfo=UTC)
+    target_date = datetime(year, month, 1, tzinfo=JST)
 
     if target_date < YAKUMAN_LOGS_AVAILABLE_FROM:
         msg = f"yakuman logs are available starting from {YAKUMAN_LOGS_AVAILABLE_FROM.year}/{YAKUMAN_LOGS_AVAILABLE_FROM.month}"  # noqa: E501
         raise UserInputError(msg)
 
-    if target_date > now:
+    now_jst = now.astimezone(JST)
+    if (year, month) > (now_jst.year, now_jst.month):
         msg = "future dates are not allowed"
         raise UserInputError(msg)
 
@@ -91,13 +93,41 @@ def iter_ids_from_old_format(ykm_array: list) -> Iterator[tuple[str, str]]:
         yield entry[0], entry[4]
 
 
-def iter_ids(text: str) -> Iterator[tuple[str, str]]:
-    match = YKM_ARRAY_PATTERN.search(text)
+def extract_ykm_array(text: str) -> str:
+    match = YKM_ARRAY_START_PATTERN.search(text)
     if not match:
         msg = "ykm array not found in input text"
         raise ExternalResponseParseError(msg)
 
-    ykm_text = match.group(1)
+    depth = 0
+    quote = None
+    escaped = False
+    for index in range(match.end(), len(text)):
+        char = text[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+        elif char in {"'", '"'}:
+            quote = char
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                if text[index + 1 : index + 2] == ";":
+                    return text[match.end() : index + 1]
+                break
+
+    msg = "failed to parse ykm array"
+    raise ExternalResponseParseError(msg)
+
+
+def iter_ids(text: str) -> Iterator[tuple[str, str]]:
+    ykm_text = extract_ykm_array(text)
     try:
         ykm_array = ast.literal_eval(ykm_text)
     except (SyntaxError, ValueError) as e:

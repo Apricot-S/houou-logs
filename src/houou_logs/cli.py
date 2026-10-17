@@ -121,7 +121,8 @@ def yakuman_cli(args: Namespace, now: datetime | None = None) -> None:
     if now is None:
         now = datetime.now(UTC)
 
-    if args.year == now.year and args.month == now.month:
+    now_jst = now.astimezone(yakuman.JST)
+    if args.year == now_jst.year and args.month == now_jst.month:
         print(
             "Warning: This month is not finished yet. More logs may appear later.",  # noqa: E501
             file=sys.stderr,

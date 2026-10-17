@@ -14,6 +14,7 @@ from houou_logs import yakuman as yakuman_module
 from houou_logs.db import LogEntry
 from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 from houou_logs.yakuman import (
+    JST,
     build_url,
     iter_entries,
     iter_ids,
@@ -86,6 +87,33 @@ def test_validate_yakuman_log_date_current_month() -> None:
     validate_yakuman_log_date(2025, 9, fixed_now)
 
 
+@pytest.mark.parametrize(("year", "month"), [(2026, 10), (2027, 1)])
+@pytest.mark.parametrize(("hour", "minute"), [(0, 0), (8, 59), (9, 0)])
+@pytest.mark.parametrize("use_utc", [False, True])
+def test_validate_yakuman_log_date_jst_month_boundary(
+    year: int,
+    month: int,
+    hour: int,
+    minute: int,
+    *,
+    use_utc: bool,
+) -> None:
+    now = datetime(year, month, 1, hour, minute, tzinfo=JST)
+    if use_utc:
+        now = now.astimezone(UTC)
+    validate_yakuman_log_date(year, month, now)
+    next_month = month % 12 + 1
+    next_year = year + (month == 12)
+    with pytest.raises(UserInputError, match="future dates are not allowed"):
+        validate_yakuman_log_date(next_year, next_month, now)
+
+
+def test_validate_yakuman_log_date_before_jst_month_boundary() -> None:
+    now = datetime(2026, 9, 30, 23, 59, tzinfo=JST)
+    with pytest.raises(UserInputError, match="future dates are not allowed"):
+        validate_yakuman_log_date(2026, 10, now)
+
+
 def test_build_url() -> None:
     assert build_url(2025, 1) == "https://tenhou.net/sc/2025/01/ykm.js"
 
@@ -101,6 +129,53 @@ sw();
         ("01/31 23:40", "2025013123gm-0089-0000-a148333d"),
     ]
     assert list(iter_ids(text)) == ids
+
+
+@pytest.mark.parametrize(
+    "name_literal",
+    [
+        "'name];'",
+        '"name];"',
+        r"'name\'];[still quoted'",
+        r'"name\"];[still quoted"',
+        r"'name\\'",
+        r"'name\\\'];[still quoted'",
+        "'name[[]];'",
+    ],
+)
+@pytest.mark.parametrize("old_format", [False, True])
+def test_iter_ids_delimiters_in_strings(
+    name_literal: str,
+    *,
+    old_format: bool,
+) -> None:
+    log_id = "2025010100gm-00a9-0000-00000000"
+    entry = (
+        f"'01/01 00:00',{name_literal},[[1, [2]], 'nested];'],[], '{log_id}'"
+    )
+    array = f"[[{entry}]]" if old_format else f"[{entry}]"
+    text = f"ykm={array};\nsw();"
+    assert list(iter_ids(text)) == [("01/01 00:00", log_id)]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ykm=['unterminated];",
+        'ykm=["unterminated];',
+        "ykm=['trailing escape\\",
+        "ykm=[[1];",
+        "ykm=[",
+        "ykm=[]",
+        "ykm=[] extra;",
+    ],
+)
+def test_iter_ids_rejects_unterminated_array(text: str) -> None:
+    with pytest.raises(
+        ExternalResponseParseError,
+        match="failed to parse ykm array",
+    ):
+        list(iter_ids(text))
 
 
 def test_iter_ids_new_format_empty() -> None:

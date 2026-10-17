@@ -33,6 +33,7 @@ from houou_logs.cli import (
     yakuman_cli,
 )
 from houou_logs.exceptions import UserInputError
+from houou_logs.yakuman import JST
 
 
 def test_set_import_args_parses_correctly() -> None:
@@ -161,6 +162,59 @@ def test_yakuman_cli_warns_yakuman_for_current_month(
     yakuman_cli(args)
     captured = capsys.readouterr()
     assert "Warning: This month is not finished yet." in captured.err
+
+
+@pytest.mark.usefixtures("mock_yakuman")
+@pytest.mark.parametrize(("year", "month"), [(2026, 10), (2027, 1)])
+@pytest.mark.parametrize(("hour", "minute"), [(0, 0), (8, 59), (9, 0)])
+@pytest.mark.parametrize("use_utc", [False, True])
+def test_yakuman_cli_warns_for_jst_current_month(
+    capsys: pytest.CaptureFixture,
+    year: int,
+    month: int,
+    hour: int,
+    minute: int,
+    *,
+    use_utc: bool,
+) -> None:
+    now = datetime(year, month, 1, hour, minute, tzinfo=JST)
+    if use_utc:
+        now = now.astimezone(UTC)
+    args = Namespace(db_path=Path("db.sqlite"), year=year, month=month)
+    yakuman_cli(args, now)
+    assert (
+        "Warning: This month is not finished yet." in capsys.readouterr().err
+    )
+
+
+@pytest.mark.usefixtures("mock_yakuman")
+@pytest.mark.parametrize(
+    ("year", "month", "previous_year", "previous_month"),
+    [(2026, 10, 2026, 9), (2027, 1, 2026, 12)],
+)
+@pytest.mark.parametrize(("hour", "minute"), [(0, 0), (8, 59), (9, 0)])
+@pytest.mark.parametrize("use_utc", [False, True])
+def test_yakuman_cli_does_not_warn_for_jst_previous_month(
+    capsys: pytest.CaptureFixture,
+    year: int,
+    month: int,
+    previous_year: int,
+    previous_month: int,
+    hour: int,
+    minute: int,
+    *,
+    use_utc: bool,
+) -> None:
+    now = datetime(year, month, 1, hour, minute, tzinfo=JST)
+    if use_utc:
+        now = now.astimezone(UTC)
+    args = Namespace(
+        db_path=Path("db.sqlite"),
+        year=previous_year,
+        month=previous_month,
+    )
+    yakuman_cli(args, now)
+    assert "Warning:" not in capsys.readouterr().err
 
 
 def test_set_download_args_without_options() -> None:
@@ -358,6 +412,7 @@ def test_main_rejects_missing_database(
         ("--length", "x", "invalid length of game: x"),
         ("--limit", "0", "invalid limit: 0"),
         ("--limit", "-1", "invalid limit: -1"),
+        ("--limit", str(2**63), f"invalid limit: {2**63}"),
     ],
 )
 def test_main_rejects_invalid_common_options_before_database_access(
@@ -384,6 +439,60 @@ def test_main_rejects_invalid_common_options_before_database_access(
     assert captured.out == ""
     assert captured.err == f"Error: {message}\n"
     assert not output_dir.exists()
+
+
+@pytest.mark.parametrize("limit", [None, 1])
+@pytest.mark.parametrize("offset", [-1, 2**63, 2**64])
+def test_main_rejects_invalid_offset_before_database_access(
+    limit: int | None,
+    offset: int,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "db.sqlite"
+    db_path.touch()
+    output_dir = tmp_path / "xml"
+    argv = ["export", str(db_path), str(output_dir), "--offset", str(offset)]
+    if limit is not None:
+        argv.extend(["--limit", str(limit)])
+
+    with patch("houou_logs.db.open_db") as mock_open_db:
+        assert main(argv) == USER_INPUT_ERROR_EXIT_CODE
+        mock_open_db.assert_not_called()
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: invalid offset of export: {offset}\n"
+    assert not output_dir.exists()
+
+
+@pytest.mark.parametrize(
+    ("command", "options"),
+    [
+        ("download", ["--limit", str(2**63 - 1)]),
+        ("export", ["--limit", str(2**63 - 1)]),
+        ("export", ["--limit", "1", "--offset", str(2**63 - 1)]),
+    ],
+)
+def test_main_accepts_sqlite_integer_upper_bound(
+    command: str,
+    options: list[str],
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "db.sqlite"
+    conn = db.open_db(db_path)
+    try:
+        db.setup_table(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    argv = [command, str(db_path)]
+    if command == "export":
+        argv.append(str(tmp_path / "xml"))
+    argv.extend(options)
+
+    with patch("houou_logs.download.create_session"):
+        assert main(argv) == SUCCESS_EXIT_CODE
 
 
 @patch("houou_logs.fetch.fetch")
@@ -649,6 +758,7 @@ def test_main_fetch_rejects_invalid_index_before_downloading(
     "content",
     [
         None,
+        b"",
         b"\xff",
         b"not gzip",
         gzip.compress(b"<html>Service unavailable</html>"),
