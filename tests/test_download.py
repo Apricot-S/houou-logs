@@ -19,7 +19,7 @@ from houou_logs.download import (
     fetch_log_content_for_download,
     iter_undownloaded_log_id_batches,
 )
-from houou_logs.exceptions import LogFetchError
+from houou_logs.exceptions import LogFetchError, TemporaryLogFetchError
 from houou_logs.session import TIMEOUT
 
 
@@ -73,8 +73,8 @@ def test_fetch_log_content_rejects_missing_content() -> None:
 
 def test_fetch_log_content_rejects_http_error() -> None:
     session = Mock(spec_set=Session)
-    session.get.return_value = Mock(status_code=503, content=b"<mjloggm/>")
-    with pytest.raises(LogFetchError, match="HTTP 503"):
+    session.get.return_value = Mock(status_code=404, content=b"<mjloggm/>")
+    with pytest.raises(LogFetchError, match="HTTP 404"):
         fetch_log_content(session, "https://example.com")
 
 
@@ -174,7 +174,10 @@ def test_fetch_log_content_for_download_success() -> None:
 
 @pytest.mark.parametrize(
     "error",
-    [LogFetchError("failed"), RequestException()],
+    [
+        LogFetchError("failed"),
+        UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad"),
+    ],
 )
 def test_fetch_log_content_for_download_fetch_error(error: Exception) -> None:
     mock_session = Mock(spec_set=Session)
@@ -250,3 +253,78 @@ def test_download_unexpected_error_preserves_unprocessed_log(
             (log_id,),
         ).fetchone()
     assert row == (0, 0, None)
+
+
+@pytest.mark.parametrize("status", [408, 429, 500, 502, 503, 504, 599])
+@pytest.mark.parametrize(
+    "retry_after",
+    [None, "120", "Wed, 21 Oct 2026 07:28:00 GMT"],
+)
+def test_download_stops_and_can_resume(
+    db_path: Path,
+    status: int,
+    retry_after: str | None,
+) -> None:
+    log_ids = [f"202501010{i}gm-00a9-0000-00000000" for i in range(3)]
+    content = b"<mjloggm/>"
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        db.insert_log_entries(
+            conn.cursor(),
+            [
+                db.LogEntry(
+                    log_id,
+                    "2025-01-01",
+                    4,
+                    is_tonpu=False,
+                    is_processed=False,
+                    was_error=False,
+                    log=None,
+                )
+                for log_id in log_ids
+            ],
+        )
+    headers = {} if retry_after is None else {"Retry-After": retry_after}
+    with (
+        patch("houou_logs.download.create_session") as create,
+        patch(
+            "houou_logs.download.tqdm.write",
+        ) as write,
+    ):
+        session = create.return_value.__enter__.return_value
+        session.get.side_effect = [
+            Mock(status_code=200, content=content),
+            Mock(status_code=status, headers=headers),
+        ]
+        assert download(db_path, None, None, None) == 1
+        assert session.get.call_count == 2
+        assert f"HTTP {status}" in write.call_args.args[0]
+        if retry_after is not None:
+            assert f"Retry-After: {retry_after}" in write.call_args.args[0]
+    with db.open_db(db_path) as conn:
+        rows = conn.execute(
+            "SELECT is_processed, was_error, log FROM logs ORDER BY id",
+        ).fetchall()
+    assert rows[0][:2] == (1, 0)
+    assert gzip.decompress(rows[0][2]) == content
+    assert rows[1:] == [(0, 0, None), (0, 0, None)]
+    with patch("houou_logs.download.create_session") as create:
+        session = create.return_value.__enter__.return_value
+        session.get.return_value = Mock(status_code=200, content=content)
+        assert download(db_path, None, None, None) == 2
+        assert [call.args[0] for call in session.get.call_args_list] == [
+            build_url(log_id) for log_id in log_ids[1:]
+        ]
+
+
+def test_network_error_is_retryable() -> None:
+    session = Mock(spec_set=Session)
+    session.get.side_effect = RequestException("connection failed")
+    with pytest.raises(TemporaryLogFetchError, match="connection failed"):
+        fetch_log_content_for_download(session, "log-id")
+
+
+def test_permanent_http_error_is_recorded() -> None:
+    session = Mock(spec_set=Session)
+    session.get.return_value = Mock(status_code=404)
+    assert fetch_log_content_for_download(session, "log-id") == (True, b"")

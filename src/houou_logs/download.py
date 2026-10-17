@@ -16,7 +16,7 @@ from niquests.exceptions import RequestException
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.exceptions import LogFetchError
+from houou_logs.exceptions import LogFetchError, TemporaryLogFetchError
 from houou_logs.input_validation import (
     validate_db_path,
     validate_length,
@@ -26,6 +26,7 @@ from houou_logs.input_validation import (
 from houou_logs.session import TIMEOUT, create_session
 
 DOWNLOAD_BATCH_SIZE = 1000
+_TEMPORARY_HTTP_STATUSES = {408, 429, *range(500, 600)}
 
 # Identify the root's opening tag. Tenhou logs can contain malformed
 # XML, such as unescaped attribute values. Leave validation to validate.
@@ -42,6 +43,12 @@ def build_url(log_id: str) -> str:
 
 def fetch_log_content(session: Session, url: str) -> bytes:
     resp = session.get(url, timeout=TIMEOUT)
+    if resp.status_code in _TEMPORARY_HTTP_STATUSES:
+        msg = f"temporary fetch failure: HTTP {resp.status_code}"
+        retry_after = resp.headers.get("Retry-After")
+        if retry_after:
+            msg += f"; Retry-After: {retry_after}"
+        raise TemporaryLogFetchError(msg)
     if resp.status_code != niquests.codes["ok"]:
         msg = f"failed to fetch: HTTP {resp.status_code}"
         raise LogFetchError(msg)
@@ -66,7 +73,12 @@ def fetch_log_content_for_download(
 
     try:
         content = fetch_log_content(session, url)
-    except (RequestException, LogFetchError, UnicodeDecodeError) as e:
+    except TemporaryLogFetchError:
+        raise
+    except RequestException as e:
+        msg = f"temporary fetch failure: {e}"
+        raise TemporaryLogFetchError(msg) from e
+    except (LogFetchError, UnicodeDecodeError) as e:
         tqdm.write(f"{log_id}: {e}")
         return (True, b"")
 
@@ -150,10 +162,17 @@ def download(
                     DOWNLOAD_BATCH_SIZE,
                 ):
                     for log_id in ids:
-                        was_error, content = fetch_log_content_for_download(
-                            session,
-                            log_id,
-                        )
+                        try:
+                            was_error, content = (
+                                fetch_log_content_for_download(session, log_id)
+                            )
+                        except TemporaryLogFetchError as e:
+                            tqdm.write(
+                                f"{log_id}: {e}; download stopped. "
+                                "Pending logs remain unprocessed; "
+                                "run download again later to resume.",
+                            )
+                            return num_logs
 
                         compressed_content = None
                         if not was_error:

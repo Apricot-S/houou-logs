@@ -15,5 +15,9 @@ class LogFetchError(RuntimeError):
     """The server response does not contain a downloadable log."""
 
 
+class TemporaryLogFetchError(LogFetchError):
+    """A temporary failure leaves the current log available to retry."""
+
+
 class InvalidLogContentError(ValueError):
     """The XML log does not satisfy the expected log structure."""
