@@ -79,7 +79,15 @@ def test_commands_upgrade_legacy_logs_indexes_without_changing_data(
     for _ in range(2):
         match command:
             case "download":
-                assert download.download(db_path, 4, None, None) == 0
+                assert (
+                    download.download(
+                        db_path,
+                        4,
+                        None,
+                        None,
+                    )
+                    == download.DownloadResult()
+                )
             case "export":
                 assert (
                     export.export(

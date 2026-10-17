@@ -11,7 +11,9 @@ from niquests import Session
 from niquests.exceptions import RequestException
 
 from houou_logs import db
+from houou_logs.cli import main
 from houou_logs.download import (
+    DownloadResult,
     build_url,
     compress_log_content,
     download,
@@ -20,6 +22,7 @@ from houou_logs.download import (
     iter_undownloaded_log_id_batches,
 )
 from houou_logs.exceptions import LogFetchError, TemporaryLogFetchError
+from houou_logs.log_id import parse_id
 from houou_logs.session import TIMEOUT
 
 
@@ -296,7 +299,10 @@ def test_download_stops_and_can_resume(
             Mock(status_code=200, content=content),
             Mock(status_code=status, headers=headers),
         ]
-        assert download(db_path, None, None, None) == 1
+        assert download(db_path, None, None, None) == DownloadResult(
+            1,
+            stopped=True,
+        )
         assert session.get.call_count == 2
         assert f"HTTP {status}" in write.call_args.args[0]
         if retry_after is not None:
@@ -311,7 +317,7 @@ def test_download_stops_and_can_resume(
     with patch("houou_logs.download.create_session") as create:
         session = create.return_value.__enter__.return_value
         session.get.return_value = Mock(status_code=200, content=content)
-        assert download(db_path, None, None, None) == 2
+        assert download(db_path, None, None, None) == DownloadResult(2)
         assert [call.args[0] for call in session.get.call_args_list] == [
             build_url(log_id) for log_id in log_ids[1:]
         ]
@@ -328,3 +334,70 @@ def test_permanent_http_error_is_recorded() -> None:
     session = Mock(spec_set=Session)
     session.get.return_value = Mock(status_code=404)
     assert fetch_log_content_for_download(session, "log-id") == (True, b"")
+
+
+@pytest.mark.parametrize(
+    ("statuses", "limit", "compression_error", "expected", "exit_code"),
+    [
+        ([200, 200, 200], None, False, DownloadResult(3), 0),
+        ([404, 404, 404], None, False, DownloadResult(0, 3), 1),
+        ([200, 404, 200], None, False, DownloadResult(2, 1), 1),
+        ([200, 200, 200], None, True, DownloadResult(0, 3), 1),
+        ([404, 200, 200], 2, False, DownloadResult(1, 1), 1),
+        ([503, 503, 503], None, False, DownloadResult(stopped=True), 1),
+        ([200, 503, 200], None, False, DownloadResult(1, stopped=True), 1),
+        ([], None, False, DownloadResult(), 0),
+    ],
+)
+def test_download_summary_and_exit_code(
+    db_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    statuses: list[int],
+    limit: int | None,
+    *,
+    compression_error: bool,
+    expected: DownloadResult,
+    exit_code: int,
+) -> None:
+    log_ids = [
+        f"202501010{i}gm-00a9-0000-00000000" for i in range(len(statuses))
+    ]
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        db.insert_log_entries(
+            conn.cursor(),
+            [parse_id("00:00", log_id) for log_id in log_ids],
+        )
+    argv = ["download", str(db_path)]
+    if limit is not None:
+        argv.extend(["--limit", str(limit)])
+    with (
+        patch("houou_logs.download.create_session") as create,
+        patch(
+            "houou_logs.download.gzip.compress",
+            wraps=gzip.compress,
+        ) as compress,
+    ):
+        session = create.return_value.__enter__.return_value
+        session.get.side_effect = [
+            Mock(status_code=status, content=b"<mjloggm/>", headers={})
+            for status in statuses
+        ]
+        if compression_error:
+            compress.side_effect = OSError("compression failed")
+        assert main(argv) == exit_code
+        assert session.get.call_count == (
+            expected.num_processed + int(expected.stopped)
+        )
+    stderr = capsys.readouterr().err
+    assert f"Number of logs processed: {expected.num_processed}" in stderr
+    assert f"Number of logs downloaded: {expected.num_succeeded}" in stderr
+    assert f"Number of logs failed: {expected.num_failed}" in stderr
+    assert ("Download stopped" in stderr) == expected.stopped
+    with db.open_db(db_path) as conn:
+        rows = conn.execute(
+            "SELECT is_processed, was_error, log FROM logs ORDER BY id",
+        ).fetchall()
+    assert sum(row[0] for row in rows) == expected.num_processed
+    assert sum(row[1] for row in rows) == expected.num_failed
+    assert sum(row[2] is not None for row in rows) == expected.num_succeeded

@@ -32,6 +32,7 @@ from houou_logs.cli import (
     validate_cli,
     yakuman_cli,
 )
+from houou_logs.download import DownloadResult
 from houou_logs.exceptions import UserInputError
 from houou_logs.yakuman import JST
 
@@ -239,6 +240,7 @@ def test_set_download_args_with_options() -> None:
 
 @patch("houou_logs.download.download")
 def test_download_cli_calls_download(mock_download: Mock) -> None:
+    mock_download.return_value = DownloadResult(1)
     args = Namespace(db_path=Path("db.sqlite"), players=4, length="h", limit=1)
     download_cli(args)
     mock_download.assert_called_once_with(Path("db.sqlite"), 4, "h", 1)

@@ -157,13 +157,20 @@ Options:
 - `-l`, `--length <LENGTH>`  
   Game length: `t` for tonpu (East Only), `h` for hanchan (Two-Wind Match). If omitted, both are included.
 - `--limit <LIMIT>`  
-  Max number of logs to download. If omitted, all available logs are downloaded.
+  Max number of logs to process, including failures. If omitted, all available logs are processed.
 
 Example:
 
 ```sh
 houou-logs download db/2024.db --players 3 --length h --limit 50
 ```
+
+The final summary reports processed, successfully downloaded, and failed counts.
+Processed counts include permanent fetch failures and compression failures; these
+failures do not count as successful downloads. A temporary error stops the run
+and leaves the affected ID unprocessed, outside these counts.
+The exit code is 1 if any log fails or a temporary error stops the run, including
+partial success; otherwise it is 0, including when no logs match.
 
 ### Validate that downloaded logs can be parsed
 
