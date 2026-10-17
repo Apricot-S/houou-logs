@@ -33,6 +33,7 @@ from houou_logs.cli import (
     yakuman_cli,
 )
 from houou_logs.exceptions import UserInputError
+from houou_logs.yakuman import JST
 
 
 def test_set_import_args_parses_correctly() -> None:
@@ -161,6 +162,59 @@ def test_yakuman_cli_warns_yakuman_for_current_month(
     yakuman_cli(args)
     captured = capsys.readouterr()
     assert "Warning: This month is not finished yet." in captured.err
+
+
+@pytest.mark.usefixtures("mock_yakuman")
+@pytest.mark.parametrize(("year", "month"), [(2026, 10), (2027, 1)])
+@pytest.mark.parametrize(("hour", "minute"), [(0, 0), (8, 59), (9, 0)])
+@pytest.mark.parametrize("use_utc", [False, True])
+def test_yakuman_cli_warns_for_jst_current_month(
+    capsys: pytest.CaptureFixture,
+    year: int,
+    month: int,
+    hour: int,
+    minute: int,
+    *,
+    use_utc: bool,
+) -> None:
+    now = datetime(year, month, 1, hour, minute, tzinfo=JST)
+    if use_utc:
+        now = now.astimezone(UTC)
+    args = Namespace(db_path=Path("db.sqlite"), year=year, month=month)
+    yakuman_cli(args, now)
+    assert (
+        "Warning: This month is not finished yet." in capsys.readouterr().err
+    )
+
+
+@pytest.mark.usefixtures("mock_yakuman")
+@pytest.mark.parametrize(
+    ("year", "month", "previous_year", "previous_month"),
+    [(2026, 10, 2026, 9), (2027, 1, 2026, 12)],
+)
+@pytest.mark.parametrize(("hour", "minute"), [(0, 0), (8, 59), (9, 0)])
+@pytest.mark.parametrize("use_utc", [False, True])
+def test_yakuman_cli_does_not_warn_for_jst_previous_month(
+    capsys: pytest.CaptureFixture,
+    year: int,
+    month: int,
+    previous_year: int,
+    previous_month: int,
+    hour: int,
+    minute: int,
+    *,
+    use_utc: bool,
+) -> None:
+    now = datetime(year, month, 1, hour, minute, tzinfo=JST)
+    if use_utc:
+        now = now.astimezone(UTC)
+    args = Namespace(
+        db_path=Path("db.sqlite"),
+        year=previous_year,
+        month=previous_month,
+    )
+    yakuman_cli(args, now)
+    assert "Warning:" not in capsys.readouterr().err
 
 
 def test_set_download_args_without_options() -> None:

@@ -6,7 +6,7 @@ import ast
 import re
 from collections.abc import Iterable, Iterator
 from contextlib import closing
-from datetime import MAXYEAR, MINYEAR, UTC, datetime
+from datetime import MAXYEAR, MINYEAR, datetime, timedelta, timezone
 from pathlib import Path
 
 from niquests import Session
@@ -17,7 +17,8 @@ from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 from houou_logs.log_id import parse_date, parse_type
 from houou_logs.session import TIMEOUT, create_session
 
-YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=UTC)
+JST = timezone(timedelta(hours=9))
+YAKUMAN_LOGS_AVAILABLE_FROM = datetime(2006, 10, 1, tzinfo=JST)
 
 YKM_ARRAY_START_PATTERN = re.compile(r"ykm=(?=\[)")
 YAKUMAN_LOG_DATE_PATTERN = re.compile(r"^\d{2}/\d{2} \d{2}:\d{2}$")
@@ -35,13 +36,14 @@ def validate_yakuman_log_date(year: int, month: int, now: datetime) -> None:
         msg = f"year must be between {MINYEAR} and {MAXYEAR}"
         raise UserInputError(msg)
 
-    target_date = datetime(year, month, 1, tzinfo=UTC)
+    target_date = datetime(year, month, 1, tzinfo=JST)
 
     if target_date < YAKUMAN_LOGS_AVAILABLE_FROM:
         msg = f"yakuman logs are available starting from {YAKUMAN_LOGS_AVAILABLE_FROM.year}/{YAKUMAN_LOGS_AVAILABLE_FROM.month}"  # noqa: E501
         raise UserInputError(msg)
 
-    if target_date > now:
+    now_jst = now.astimezone(JST)
+    if (year, month) > (now_jst.year, now_jst.month):
         msg = "future dates are not allowed"
         raise UserInputError(msg)
 
