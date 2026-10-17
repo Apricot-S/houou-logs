@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import niquests
-from niquests.exceptions import RequestException
+from niquests.exceptions import HTTPError, RequestException
 from tqdm import tqdm
 
 from houou_logs import db
@@ -21,6 +21,7 @@ from houou_logs.session import TIMEOUT, create_session
 MIN_FETCH_INTERVAL = timedelta(minutes=20)
 FETCH_KIND_LATEST = "latest"
 FETCH_KIND_ARCHIVE = "archive"
+_TEMPORARY_HTTP_STATUSES = {408, 429, *range(500, 600)}
 
 INDEX_URL_LATEST = "https://tenhou.net/sc/raw/list.cgi"
 INDEX_URL_OLD = "https://tenhou.net/sc/raw/list.cgi?old"
@@ -150,8 +151,30 @@ def fetch(db_path: str | Path, *, archive: bool) -> int | timedelta:
                             validate_body=True,
                         )
                         inserted = db.insert_log_entries(cursor, entries)
+                except RequestException as e:
+                    conn.rollback()
+                    response = e.response
+                    if (
+                        isinstance(e, HTTPError)
+                        and response is not None
+                        and response.status_code
+                        not in _TEMPORARY_HTTP_STATUSES
+                    ):
+                        tqdm.write(f"{filename}: {e}")
+                        continue
+
+                    message = f"{filename}: temporary fetch failure: {e}"
+                    if response is not None:
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after:
+                            message += f"; Retry-After: {retry_after}"
+                    tqdm.write(
+                        message + "; fetch stopped. "
+                        "Pending files remain unprocessed; "
+                        "run fetch again later to resume.",
+                    )
+                    break
                 except (
-                    RequestException,
                     ExternalResponseParseError,
                     UnicodeDecodeError,
                     OSError,
