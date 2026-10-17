@@ -98,6 +98,12 @@ Any `Retry-After` header is displayed as supplied (seconds or an HTTP date); use
 
 Successfully imported files remain committed. Failed or unprocessed files remain eligible for a later run, subject to the same 20-minute interval.
 
+The final summary reports inserted IDs and successful and failed list files.
+Partial failure, complete failure, or stopping due to a temporary error returns
+exit code 1. Unprocessed files are excluded from both file counts.
+Unchanged files, a valid empty index or list, lists containing only existing IDs,
+and skips within the 20-minute interval return exit code 0.
+
 #### Fetch log IDs from the latest 7 days (default mode)
 
 ```sh

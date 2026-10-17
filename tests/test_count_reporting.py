@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.export import export
-from houou_logs.fetch import fetch
+from houou_logs.fetch import FetchResult, fetch
 from houou_logs.import_ import import_
 from houou_logs.log_id import parse_id
 from houou_logs.yakuman import yakuman
@@ -74,8 +74,8 @@ def test_import_operations_report_actual_insertions(
                 return_value=compressed,
             ),
         ):
-            assert fetch(db_path, archive=False) == 2
-            assert fetch(db_path, archive=False) == 0
+            assert fetch(db_path, archive=False) == FetchResult(2, 2)
+            assert fetch(db_path, archive=False) == FetchResult(0, 2)
     else:
         ids = [("01/01 00:00", log_id) for log_id in [*LOG_IDS, LOG_IDS[-1]]]
         with (

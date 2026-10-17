@@ -34,6 +34,7 @@ from houou_logs.cli import (
 )
 from houou_logs.download import DownloadResult
 from houou_logs.exceptions import UserInputError
+from houou_logs.fetch import FetchResult
 from houou_logs.yakuman import JST
 
 
@@ -79,6 +80,7 @@ def test_set_fetch_args_missing_args() -> None:
 
 @patch("houou_logs.fetch.fetch")
 def test_fetch_cli_calls_fetch(mock_fetch: Mock) -> None:
+    mock_fetch.return_value = FetchResult()
     args = Namespace(db_path=Path("db.sqlite"), archive=True)
     fetch_cli(args)
     mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=True)
@@ -100,13 +102,13 @@ def test_fetch_cli_calls_fetch(mock_fetch: Mock) -> None:
             timedelta(seconds=10, microseconds=1),
             "Please retry in approximately 20s.",
         ),
-        (0, "Number of log entries inserted into the DB: 0"),
-        (3, "Number of log entries inserted into the DB: 3"),
+        (FetchResult(), "Number of log entries inserted into the DB: 0"),
+        (FetchResult(3, 1), "Number of log entries inserted into the DB: 3"),
     ],
 )
 def test_fetch_cli_reports_result(
     capsys: pytest.CaptureFixture[str],
-    result: int | timedelta,
+    result: FetchResult | timedelta,
     message: str,
 ) -> None:
     args = Namespace(db_path=Path("db.sqlite"), archive=False)
@@ -114,6 +116,11 @@ def test_fetch_cli_reports_result(
         fetch_cli(args)
     output = capsys.readouterr()
     assert output.out == ""
+    if isinstance(result, FetchResult):
+        message += (
+            f"\nNumber of list files fetched: {result.num_succeeded}"
+            f"\nNumber of list files failed: {result.num_failed}"
+        )
     assert output.err == f"{message}\n"
 
 
@@ -338,6 +345,7 @@ def test_main_accepts_argument_sequence(
     mock_fetch: Mock,
     argv: Sequence[str],
 ) -> None:
+    mock_fetch.return_value = FetchResult()
     assert main(argv) == SUCCESS_EXIT_CODE
     mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=False)
 
@@ -349,6 +357,7 @@ def test_main_without_arguments_uses_sys_argv(
 ) -> None:
     monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
 
+    mock_fetch.return_value = FetchResult()
     assert main() == SUCCESS_EXIT_CODE
     mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=False)
 
@@ -785,7 +794,7 @@ def test_main_fetch_handles_invalid_file_response(
         create_session.return_value.__enter__.return_value.get.return_value = (
             response
         )
-        assert main(["fetch", str(db_path)]) == SUCCESS_EXIT_CODE
+        assert main(["fetch", str(db_path)]) == IO_ERROR_EXIT_CODE
     captured = capsys.readouterr()
     assert "Traceback" not in captured.out + captured.err
     assert filename in captured.out
@@ -817,3 +826,32 @@ def test_main_yakuman_handles_invalid_response_encoding(
     captured = capsys.readouterr()
     assert "Traceback" not in captured.out + captured.err
     assert "Number of log entries inserted" not in captured.err
+
+
+@pytest.mark.parametrize(
+    ("result", "exit_code"),
+    [
+        (FetchResult(), SUCCESS_EXIT_CODE),
+        (FetchResult(0, 2), SUCCESS_EXIT_CODE),
+        (FetchResult(2, 2), SUCCESS_EXIT_CODE),
+        (FetchResult(0, 0, 3), IO_ERROR_EXIT_CODE),
+        (FetchResult(1, 1, 1), IO_ERROR_EXIT_CODE),
+        (FetchResult(1, 1, 1, stopped=True), IO_ERROR_EXIT_CODE),
+        (FetchResult(stopped=True), IO_ERROR_EXIT_CODE),
+        (timedelta(minutes=1), SUCCESS_EXIT_CODE),
+    ],
+)
+def test_main_fetch_reports_outcomes(
+    capsys: pytest.CaptureFixture[str],
+    result: FetchResult | timedelta,
+    exit_code: int,
+) -> None:
+    with patch("houou_logs.fetch.fetch", return_value=result):
+        assert main(["fetch", "db.sqlite"]) == exit_code
+    output = capsys.readouterr().err
+    if isinstance(result, FetchResult):
+        assert f"list files fetched: {result.num_succeeded}" in output
+        assert f"list files failed: {result.num_failed}" in output
+        assert ("Fetch stopped" in output) == result.stopped
+    else:
+        assert "Please retry" in output

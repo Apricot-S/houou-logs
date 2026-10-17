@@ -6,6 +6,7 @@ import io
 import re
 import zlib
 from contextlib import closing
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -44,6 +45,14 @@ FILE_INDEX_ENTRIES_PATTERN = re.compile(
 EMPTY_FILE_INDEX_PATTERN = re.compile(
     r"^\s*list\s*\(\s*(?:\[\s*\])?\s*\)\s*;\s*$",
 )
+
+
+@dataclass
+class FetchResult:
+    num_inserted: int = 0
+    num_succeeded: int = 0
+    num_failed: int = 0
+    stopped: bool = False
 
 
 def should_fetch(
@@ -117,9 +126,9 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
     }
 
 
-def fetch(db_path: str | Path, *, archive: bool) -> int | timedelta:
-    """Return the inserted count, or the retry delay when skipped."""
-    num_logs = 0
+def fetch(db_path: str | Path, *, archive: bool) -> FetchResult | timedelta:
+    """Return file outcomes, or the retry delay when skipped."""
+    result = FetchResult()
     with closing(db.open_db(db_path)) as conn, conn:
         db.setup_table(conn)
         cursor = conn.cursor()
@@ -155,6 +164,7 @@ def fetch(db_path: str | Path, *, archive: bool) -> int | timedelta:
                         )
                         inserted = db.insert_log_entries(cursor, entries)
                 except RequestException as e:
+                    result.num_failed += 1
                     conn.rollback()
                     response = e.response
                     if (
@@ -165,6 +175,7 @@ def fetch(db_path: str | Path, *, archive: bool) -> int | timedelta:
                         tqdm.write(f"{filename}: {e}")
                         continue
 
+                    result.stopped = True
                     message = f"{filename}: temporary fetch failure: {e}"
                     if response is not None:
                         retry_after = response.headers.get("Retry-After")
@@ -183,12 +194,14 @@ def fetch(db_path: str | Path, *, archive: bool) -> int | timedelta:
                     EOFError,
                     zlib.error,
                 ) as e:
+                    result.num_failed += 1
                     conn.rollback()
                     tqdm.write(f"{filename}: {e}")
                     continue
 
                 db.insert_file_index(cursor, filename, size)
                 conn.commit()
-                num_logs += inserted
+                result.num_inserted += inserted
+                result.num_succeeded += 1
 
-    return num_logs
+    return result
