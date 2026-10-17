@@ -14,6 +14,7 @@ from houou_logs import yakuman as yakuman_module
 from houou_logs.db import LogEntry
 from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 from houou_logs.yakuman import (
+    JST,
     build_url,
     iter_entries,
     iter_ids,
@@ -84,6 +85,33 @@ def test_validate_yakuman_log_date_future_date() -> None:
 def test_validate_yakuman_log_date_current_month() -> None:
     fixed_now = datetime(2025, 9, 15, tzinfo=UTC)
     validate_yakuman_log_date(2025, 9, fixed_now)
+
+
+@pytest.mark.parametrize(("year", "month"), [(2026, 10), (2027, 1)])
+@pytest.mark.parametrize(("hour", "minute"), [(0, 0), (8, 59), (9, 0)])
+@pytest.mark.parametrize("use_utc", [False, True])
+def test_validate_yakuman_log_date_jst_month_boundary(
+    year: int,
+    month: int,
+    hour: int,
+    minute: int,
+    *,
+    use_utc: bool,
+) -> None:
+    now = datetime(year, month, 1, hour, minute, tzinfo=JST)
+    if use_utc:
+        now = now.astimezone(UTC)
+    validate_yakuman_log_date(year, month, now)
+    next_month = month % 12 + 1
+    next_year = year + (month == 12)
+    with pytest.raises(UserInputError, match="future dates are not allowed"):
+        validate_yakuman_log_date(next_year, next_month, now)
+
+
+def test_validate_yakuman_log_date_before_jst_month_boundary() -> None:
+    now = datetime(2026, 9, 30, 23, 59, tzinfo=JST)
+    with pytest.raises(UserInputError, match="future dates are not allowed"):
+        validate_yakuman_log_date(2026, 10, now)
 
 
 def test_build_url() -> None:
