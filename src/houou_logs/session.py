@@ -17,6 +17,7 @@ TIMEOUT = (
 )
 
 MIN_REQUEST_INTERVAL_SECONDS = 1.0
+TEMPORARY_HTTP_STATUSES = frozenset({408, 429, *range(500, 600)})
 
 
 class TenhouSession(niquests.Session):

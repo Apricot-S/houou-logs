@@ -24,10 +24,13 @@ from houou_logs.input_validation import (
     validate_limit,
     validate_players,
 )
-from houou_logs.session import TIMEOUT, create_session
+from houou_logs.session import (
+    TEMPORARY_HTTP_STATUSES,
+    TIMEOUT,
+    create_session,
+)
 
 DOWNLOAD_BATCH_SIZE = 1000
-_TEMPORARY_HTTP_STATUSES = {408, 429, *range(500, 600)}
 
 # Identify the root's opening tag. Tenhou logs can contain malformed
 # XML, such as unescaped attribute values. Leave validation to validate.
@@ -55,7 +58,7 @@ def build_url(log_id: str) -> str:
 
 def fetch_log_content(session: Session, url: str) -> bytes:
     resp = session.get(url, timeout=TIMEOUT)
-    if resp.status_code in _TEMPORARY_HTTP_STATUSES:
+    if resp.status_code in TEMPORARY_HTTP_STATUSES:
         msg = f"temporary fetch failure: HTTP {resp.status_code}"
         retry_after = resp.headers.get("Retry-After")
         if retry_after:
