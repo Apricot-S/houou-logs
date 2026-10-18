@@ -198,6 +198,12 @@ Validate that all downloaded mjlog XML in the database can be parsed correctly.
 If an invalid or unreadable log is found, this command resets that log entry to the undownloaded state.
 This allows a later `download` run to fetch it again.
 
+On completion, the command reports the number of logs checked, valid logs,
+invalid logs reset, and all IDs in the DB separately. Pending IDs are not checked.
+The exit code is 0 when all checked logs are valid (including no logs to check),
+3 when invalid logs were reset, 1 on I/O failure, 2 for invalid arguments,
+and 130 on interruption.
+
 Resets are saved after each batch of up to 1,000 entries has been validated.
 If validation is interrupted or fails, resets from completed batches remain
 saved; the current batch and unchecked entries remain unchanged.

@@ -7,12 +7,14 @@ import sqlite3
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from houou_logs import db
 from houou_logs import validate as validate_module
+from houou_logs.cli import main
+from houou_logs.log_id import parse_id
 
 
 def test_structural_error_does_not_hide_late_syntax_error() -> None:
@@ -99,7 +101,11 @@ def test_validate_streams_batches_without_per_log_selects(
     monkeypatch.setattr(db, "open_db", open_traced)
     monkeypatch.setattr(validate_module, "is_valid_log_content", check)
     monkeypatch.setattr(validate_module, "VALIDATE_BATCH_SIZE", 2)
-    assert validate_module.validate(db_path) == (True, 3, 7)
+    assert validate_module.validate(db_path) == validate_module.ValidateResult(
+        7,
+        3,
+        3,
+    )
     assert seen == [f"log-{index}" for index in range(6)]
     body_selects = [sql for sql in statements if "SELECT id, log" in sql]
     assert len(body_selects) == 4  # Three batches and the final empty query.
@@ -287,7 +293,11 @@ def test_validate_continues_after_resetting_invalid_log(
 
     monkeypatch.setattr(validate_module, "VALIDATE_BATCH_SIZE", 2)
 
-    assert validate_module.validate(db_path) == (True, 2, 3)
+    assert validate_module.validate(db_path) == validate_module.ValidateResult(
+        3,
+        2,
+        1,
+    )
 
     conn = db.open_db(db_path)
     try:
@@ -381,7 +391,11 @@ def test_validate_interrupted_batch_preserves_committed_batches(
         original_validate,
     )
     monkeypatch.setattr(db, "reset_log_contents", original_reset)
-    assert validate_module.validate(db_path) == (True, 2, 6)
+    assert validate_module.validate(db_path) == validate_module.ValidateResult(
+        6,
+        2,
+        3,
+    )
     with db.open_db(db_path) as conn:
         rows = conn.execute(
             "SELECT is_processed, was_error, log FROM logs ORDER BY id",
@@ -390,3 +404,87 @@ def test_validate_interrupted_batch_preserves_committed_batches(
         (1, 0, content) if content == valid_log() else (0, 0, None)
         for content in contents
     ]
+
+
+@pytest.mark.parametrize(
+    ("contents", "num_valid", "num_reset"),
+    [
+        ([], 0, 0),
+        ([b'<mjloggm><AGARI owari="0" /></mjloggm>'], 1, 0),
+        ([b"<mjloggm><INIT/>"] * 2, 0, 2),
+        (
+            [b'<mjloggm><AGARI owari="0" /></mjloggm>', b"<mjloggm><INIT/>"],
+            1,
+            1,
+        ),
+    ],
+)
+def test_validate_cli_reports_downloaded_logs_and_allows_retry(
+    db_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    contents: list[bytes],
+    num_valid: int,
+    num_reset: int,
+) -> None:
+    log_ids = [
+        f"202501010{i}gm-00a9-0000-00000000" for i in range(len(contents))
+    ]
+    pending_id = "2025010109gm-00a9-0000-00000000"
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        db.insert_log_entries(
+            conn.cursor(),
+            [parse_id("00:00", log_id) for log_id in [*log_ids, pending_id]],
+        )
+    with patch("houou_logs.download.create_session") as create_session:
+        session = create_session.return_value.__enter__.return_value
+        session.get.side_effect = [
+            Mock(status_code=200, content=content) for content in contents
+        ]
+        if contents:
+            assert (
+                main(["download", str(db_path), "--limit", str(len(contents))])
+                == 0
+            )
+    capsys.readouterr()
+
+    assert main(["validate", str(db_path)]) == (3 if num_reset else 0)
+    output = capsys.readouterr().err
+    assert f"Number of logs checked: {len(contents)}\n" in output
+    assert f"Number of valid logs: {num_valid}\n" in output
+    assert f"Number of invalid logs reset: {num_reset}\n" in output
+    assert f"Number of all IDs in the DB: {len(contents) + 1}\n" in output
+    assert ("houou-logs download" in output) == bool(num_reset)
+    with db.open_db(db_path) as conn:
+        rows = conn.execute(
+            "SELECT is_processed, was_error, log FROM logs ORDER BY id",
+        ).fetchall()
+    assert sum(row == (0, 0, None) for row in rows) == num_reset + 1
+
+    with patch("houou_logs.download.create_session") as create_session:
+        session = create_session.return_value.__enter__.return_value
+        session.get.return_value = Mock(
+            status_code=200,
+            content=b'<mjloggm><AGARI owari="0" /></mjloggm>',
+        )
+        assert main(["download", str(db_path)]) == 0
+        assert session.get.call_count == num_reset + 1
+    assert main(["validate", str(db_path)]) == 0
+
+
+@pytest.mark.parametrize(
+    ("error", "exit_code"),
+    [
+        (OSError("failed"), 1),
+        (sqlite3.OperationalError("failed"), 1),
+        (KeyboardInterrupt(), 130),
+    ],
+)
+def test_validate_cli_failure_exit_codes(
+    error: BaseException,
+    exit_code: int,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with patch("houou_logs.validate.validate", side_effect=error):
+        assert main(["validate", "db.sqlite"]) == exit_code
+    assert "Number of logs checked" not in capsys.readouterr().err
