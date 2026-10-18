@@ -87,14 +87,27 @@ def format_retry_delay(remaining: timedelta) -> str:
     return " ".join(parts)
 
 
-def fetch_cli(args: Namespace) -> None:
+def fetch_cli(args: Namespace) -> int:
     result = fetch.fetch(args.db_path, archive=args.archive)
     if isinstance(result, timedelta):
         delay = format_retry_delay(result)
-        msg = f"Please retry in approximately {delay}."
-    else:
-        msg = f"Number of log entries inserted into the DB: {result}"
-    print(msg, file=sys.stderr)
+        print(f"Please retry in approximately {delay}.", file=sys.stderr)
+        return SUCCESS_EXIT_CODE
+
+    print(
+        f"Number of log entries inserted into the DB: {result.num_inserted}",
+        file=sys.stderr,
+    )
+    print(
+        f"Number of list files fetched: {result.num_succeeded}",
+        file=sys.stderr,
+    )
+    print(f"Number of list files failed: {result.num_failed}", file=sys.stderr)
+    if result.stopped:
+        print("Fetch stopped due to a temporary error.", file=sys.stderr)
+    if result.num_failed or result.stopped:
+        return IO_ERROR_EXIT_CODE
+    return SUCCESS_EXIT_CODE
 
 
 def set_yakuman_args(parser: ArgumentParser) -> ArgumentParser:
