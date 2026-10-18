@@ -6,6 +6,7 @@ import gzip
 import xml.etree.ElementTree as ET
 import zlib
 from contextlib import closing
+from dataclasses import dataclass
 from io import BytesIO, StringIO, TextIOWrapper
 from pathlib import Path
 from typing import TextIO
@@ -17,6 +18,17 @@ from houou_logs.exceptions import InvalidLogContentError
 from houou_logs.input_validation import validate_db_path
 
 VALIDATE_BATCH_SIZE = 1000
+
+
+@dataclass
+class ValidateResult:
+    num_ids: int = 0
+    num_valid: int = 0
+    num_reset: int = 0
+
+    @property
+    def num_checked(self) -> int:
+        return self.num_valid + self.num_reset
 
 
 class _LogStructureTarget:
@@ -87,7 +99,7 @@ def is_valid_log_content(
         return False
 
 
-def validate(db_path: Path) -> tuple[bool, int, int]:
+def validate(db_path: Path) -> ValidateResult:
     validate_db_path(db_path)
 
     with closing(db.open_db(db_path)) as conn, conn:
@@ -95,10 +107,8 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
         conn.commit()
         cursor = conn.cursor()
 
-        num_ids = db.count_all_ids(cursor)
+        result = ValidateResult(num_ids=db.count_all_ids(cursor))
         num_logs = db.count_all_log_contents(cursor)
-        were_errors = False
-        num_valid_logs = 0
 
         with tqdm(total=num_logs) as progress:
             last_id = None
@@ -116,11 +126,10 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
                     last_id = log_id
                     batch_count += 1
                     if is_valid_log_content(log_id, compressed_content):
-                        num_valid_logs += 1
+                        result.num_valid += 1
                         progress.update(1)
                         continue
 
-                    were_errors = True
                     msg = "Invalid log content detected. Reset to unprocessed."
                     tqdm.write(msg)
                     invalid_ids.append(log_id)
@@ -135,5 +144,6 @@ def validate(db_path: Path) -> tuple[bool, int, int]:
                 conn.commit()
                 db.reset_log_contents(cursor, invalid_ids)
                 conn.commit()
+                result.num_reset += len(invalid_ids)
 
-    return (were_errors, num_valid_logs, num_ids)
+    return result

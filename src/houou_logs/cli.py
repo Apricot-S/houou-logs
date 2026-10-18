@@ -21,6 +21,7 @@ from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 SUCCESS_EXIT_CODE = 0
 IO_ERROR_EXIT_CODE = 1
 USER_INPUT_ERROR_EXIT_CODE = 2
+INVALID_LOG_EXIT_CODE = 3
 INTERRUPTED_EXIT_CODE = 130
 EXTERNAL_IO_ERRORS = (
     OSError,
@@ -206,13 +207,19 @@ def set_validate_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
-def validate_cli(args: Namespace) -> None:
-    were_errors, num_valid, total = validate.validate(args.db_path)
-    if not were_errors:
+def validate_cli(args: Namespace) -> int:
+    result = validate.validate(args.db_path)
+    print(f"Number of logs checked: {result.num_checked}", file=sys.stderr)
+    print(f"Number of valid logs: {result.num_valid}", file=sys.stderr)
+    print(f"Number of invalid logs reset: {result.num_reset}", file=sys.stderr)
+    print(f"Number of all IDs in the DB: {result.num_ids}", file=sys.stderr)
+    if result.num_reset:
         print(
-            f"Everything is fine, checked {num_valid}/{total} (valid logs / all IDs)",  # noqa: E501
+            "Run 'houou-logs download' with the same DB path to download reset logs again.",  # noqa: E501
             file=sys.stderr,
         )
+        return INVALID_LOG_EXIT_CODE
+    return SUCCESS_EXIT_CODE
 
 
 def set_export_args(parser: ArgumentParser) -> ArgumentParser:

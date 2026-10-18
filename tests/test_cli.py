@@ -35,6 +35,7 @@ from houou_logs.cli import (
 from houou_logs.download import DownloadResult
 from houou_logs.exceptions import UserInputError
 from houou_logs.fetch import FetchResult
+from houou_logs.validate import ValidateResult
 from houou_logs.yakuman import JST
 
 
@@ -261,7 +262,7 @@ def test_set_validate_args() -> None:
 
 @patch("houou_logs.validate.validate")
 def test_validate_cli_calls_validate(mock_validate: Mock) -> None:
-    mock_validate.return_value = (False, 1, 2)
+    mock_validate.return_value = ValidateResult(2, 1)
     args = Namespace(db_path=Path("db.sqlite"))
     validate_cli(args)
     mock_validate.assert_called_once_with(Path("db.sqlite"))
