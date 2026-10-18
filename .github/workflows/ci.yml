@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  STATIC_CHECK_PYTHON_VERSION: "3.12"
+  MIN_PYTHON_VERSION: "3.12"
 
 jobs:
   lint:
@@ -28,7 +28,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v7
       with:
-        python-version: ${{ env.STATIC_CHECK_PYTHON_VERSION }}
+        python-version: ${{ env.MIN_PYTHON_VERSION }}
 
     - uses: astral-sh/ruff-action@v4.1.0
     - run: ruff format --check --diff
@@ -44,7 +44,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v7
       with:
-        python-version: ${{ env.STATIC_CHECK_PYTHON_VERSION }}
+        python-version: ${{ env.MIN_PYTHON_VERSION }}
 
     - name: Install uv
       uses: astral-sh/setup-uv@v10.3.0
