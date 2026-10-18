@@ -16,40 +16,32 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
     - uses: actions/checkout@v7
       with:
         persist-credentials: false
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.12
       uses: actions/setup-python@v7
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.12"
 
     - uses: astral-sh/ruff-action@v4.1.0
     - run: ruff format --check --diff
 
   type-check:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
     - uses: actions/checkout@v7
       with:
         persist-credentials: false
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.12
       uses: actions/setup-python@v7
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.12"
 
     - name: Install uv
       uses: astral-sh/setup-uv@v10.3.0
