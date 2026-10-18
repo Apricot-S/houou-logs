@@ -11,9 +11,3 @@ updates:
     schedule:
       interval: "weekly"
     target-branch: "develop"
-
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    target-branch: "develop"
