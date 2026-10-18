@@ -8,16 +8,18 @@ import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from niquests import Response, Session
-from niquests.exceptions import HTTPError
+from niquests.exceptions import ConnectionError as NiquestsConnectionError
+from niquests.exceptions import HTTPError, Timeout
 
 from houou_logs import db
 from houou_logs import fetch as fetch_module
 from houou_logs.exceptions import ExternalResponseParseError
 from houou_logs.fetch import (
+    FetchResult,
     fetch_file_index_text,
     fetch_log_file_content,
     filter_houou_files,
@@ -57,7 +59,9 @@ def test_fetch_continues_after_file_errors_and_retries_only_failed_files(
     elif failure == "truncated":
         invalid = contents[1][:-4]
     else:
-        invalid = HTTPError("503 Service unavailable")
+        response = Response()
+        response.status_code = 404
+        invalid = HTTPError("404 Not Found", response=response)
     index = (
         "list(["
         + ",".join(f"{{file:'{filename}',size:123}}" for filename in filenames)
@@ -87,7 +91,7 @@ def test_fetch_continues_after_file_errors_and_retries_only_failed_files(
     finally:
         conn.close()
 
-    assert fetch_module.fetch(path, archive=False) == 2
+    assert fetch_module.fetch(path, archive=False) == FetchResult(2, 2, 2)
     assert body_fetch.call_count == 4
     output = capsys.readouterr().out
     assert filenames[1] in output
@@ -111,7 +115,7 @@ def test_fetch_continues_after_file_errors_and_retries_only_failed_files(
     finally:
         conn.close()
 
-    assert fetch_module.fetch(path, archive=False) == 2
+    assert fetch_module.fetch(path, archive=False) == FetchResult(2, 2)
     assert body_fetch.call_count == 6
     assert [call.args[1] for call in body_fetch.call_args_list[4:]] == [
         f"{fetch_module.LOG_DOWNLOAD_URL}{filename}"
@@ -192,7 +196,7 @@ def test_fetch_retry_delay(
     monkeypatch.setattr(fetch_module, "create_session", session_factory)
 
     assert fetch_module.fetch(path, archive=archive) == (
-        remaining if delay else 0
+        remaining if delay else FetchResult()
     )
     output = capsys.readouterr()
     if delay:
@@ -596,7 +600,9 @@ def test_fetch_file_is_atomic(
         with pytest.raises(sqlite3.DatabaseError):
             fetch_module.fetch(path, archive=False)
     else:
-        assert fetch_module.fetch(path, archive=False) == (0 if failure else 1)
+        assert fetch_module.fetch(path, archive=False) == (
+            FetchResult(0, 0, 1) if failure else FetchResult(1, 1)
+        )
     if not failure:
         start = next(
             i for i, sql in enumerate(statements) if "INSERT INTO logs" in sql
@@ -655,7 +661,7 @@ def test_fetch_records_valid_list_with_no_new_ids(
         "fetch_log_file_content",
         Mock(return_value=gzip.compress(content)),
     )
-    assert fetch_module.fetch(path, archive=False) == 0
+    assert fetch_module.fetch(path, archive=False) == FetchResult(0, 1)
     conn = db.open_db(path)
     try:
         assert conn.execute(
@@ -702,7 +708,7 @@ def test_fetch_retries_invalid_body_with_unchanged_file_index(
         "create_session",
         Mock(return_value=session),
     )
-    assert fetch_module.fetch(path, archive=False) == 0
+    assert fetch_module.fetch(path, archive=False) == FetchResult(0, 0, 1)
     conn = db.open_db(path)
     try:
         assert conn.execute("SELECT * FROM file_index").fetchall() == []
@@ -717,7 +723,7 @@ def test_fetch_retries_invalid_body_with_unchanged_file_index(
         conn.commit()
     finally:
         conn.close()
-    assert fetch_module.fetch(path, archive=False) == 1
+    assert fetch_module.fetch(path, archive=False) == FetchResult(1, 1)
     assert body_fetch.call_count == 2
     conn = db.open_db(path)
     try:
@@ -729,3 +735,147 @@ def test_fetch_retries_invalid_body_with_unchanged_file_index(
         assert db.count_all_ids(conn.cursor()) == 1
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize("archive", [False, True])
+@pytest.mark.parametrize(
+    "failure",
+    [408, 429, 500, 503, 599, "connection", "timeout"],
+)
+@pytest.mark.parametrize(
+    "retry_after",
+    ["3600", "Wed, 21 Oct 2026 07:28:00 GMT"],
+)
+def test_fetch_stops_and_resumes_after_temporary_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: int | str,
+    retry_after: str,
+    *,
+    archive: bool,
+) -> None:
+    path = tmp_path / "fetch.db"
+    filenames = [f"scc2025010{i}.html.gz" for i in range(1, 4)]
+    contents = [
+        gzip.compress(
+            f'00:00 log=2025010{i}00gm-00a9-0000-00000000">\n'.encode(),
+        )
+        for i in range(1, 4)
+    ]
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(
+            return_value="list(["
+            + ",".join(f"{{file:'{name}',size:123}}" for name in filenames)
+            + "]);",
+        ),
+    )
+    responses = []
+    for content in contents:
+        response = Response()
+        response.status_code = 200
+        response._content = content  # noqa: SLF001
+        responses.append(response)
+    error: Exception
+    if isinstance(failure, int):
+        response = Response()
+        response.status_code = failure
+        response.headers["Retry-After"] = retry_after
+        error = HTTPError(f"HTTP {failure}", response=response)
+    elif failure == "connection":
+        error = NiquestsConnectionError("connection failed")
+    else:
+        error = Timeout("request timed out")
+    session = Mock(spec_set=Session)
+    session.get.side_effect = [responses[0], error, *responses[1:]]
+    factory = MagicMock()
+    factory.return_value.__enter__.return_value = session
+    monkeypatch.setattr(fetch_module, "create_session", factory)
+    kind = (
+        fetch_module.FETCH_KIND_ARCHIVE
+        if archive
+        else fetch_module.FETCH_KIND_LATEST
+    )
+
+    assert fetch_module.fetch(path, archive=archive) == FetchResult(
+        1,
+        1,
+        1,
+        stopped=True,
+    )
+    assert session.get.call_count == 2
+    output = capsys.readouterr().out
+    assert "fetch stopped" in output
+    assert "run fetch again later" in output
+    if isinstance(failure, int):
+        assert f"Retry-After: {retry_after}" in output
+    conn = db.open_db(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 1
+        assert conn.execute(
+            "SELECT file, size FROM file_index",
+        ).fetchall() == [
+            (filenames[0], 123),
+        ]
+        assert isinstance(fetch_module.fetch(path, archive=archive), timedelta)
+        assert session.get.call_count == 2
+        db.update_fetch_attempt_time(
+            conn.cursor(),
+            kind,
+            datetime.now(UTC)
+            - fetch_module.MIN_FETCH_INTERVAL
+            - timedelta(seconds=1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert fetch_module.fetch(path, archive=archive) == FetchResult(2, 2)
+    assert [call.args[0] for call in session.get.call_args_list[2:]] == [
+        f"{fetch_module.LOG_DOWNLOAD_URL}{name}" for name in filenames[1:]
+    ]
+    conn = db.open_db(path)
+    try:
+        assert db.count_all_ids(conn.cursor()) == 3
+        assert dict(conn.execute("SELECT file, size FROM file_index")) == (
+            dict.fromkeys(filenames, 123)
+        )
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("failure", [None, "http", "body", "temporary"])
+def test_fetch_empty_or_failed_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str | None,
+) -> None:
+    index = {f"scc2025010{i}.html": 123 for i in range(1, 4)}
+    monkeypatch.setattr(
+        fetch_module,
+        "fetch_file_index_text",
+        Mock(return_value="list([]);"),
+    )
+    monkeypatch.setattr(
+        fetch_module,
+        "parse_file_index",
+        Mock(return_value=index if failure else {}),
+    )
+    response = Response()
+    response.status_code = 429 if failure == "temporary" else 404
+    error = (
+        ExternalResponseParseError("invalid body")
+        if failure == "body"
+        else HTTPError("request failed", response=response)
+    )
+    body_fetch = Mock(side_effect=error)
+    monkeypatch.setattr(fetch_module, "fetch_log_file_content", body_fetch)
+    result = fetch_module.fetch(tmp_path / "fetch.db", archive=False)
+    expected = (
+        FetchResult(0, 0, 1, stopped=True)
+        if failure == "temporary"
+        else FetchResult(0, 0, 3 if failure else 0)
+    )
+    assert result == expected
+    assert body_fetch.call_count == expected.num_failed

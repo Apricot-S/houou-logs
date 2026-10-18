@@ -11,6 +11,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 from niquests import Response
+from niquests.exceptions import ConnectionError as NiquestsConnectionError
+from niquests.exceptions import HTTPError
 
 from houou_logs import db
 from houou_logs.cli import (
@@ -32,7 +34,10 @@ from houou_logs.cli import (
     validate_cli,
     yakuman_cli,
 )
+from houou_logs.download import DownloadResult
 from houou_logs.exceptions import UserInputError
+from houou_logs.fetch import FetchResult
+from houou_logs.validate import ValidateResult
 from houou_logs.yakuman import JST
 
 
@@ -78,6 +83,7 @@ def test_set_fetch_args_missing_args() -> None:
 
 @patch("houou_logs.fetch.fetch")
 def test_fetch_cli_calls_fetch(mock_fetch: Mock) -> None:
+    mock_fetch.return_value = FetchResult()
     args = Namespace(db_path=Path("db.sqlite"), archive=True)
     fetch_cli(args)
     mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=True)
@@ -99,13 +105,13 @@ def test_fetch_cli_calls_fetch(mock_fetch: Mock) -> None:
             timedelta(seconds=10, microseconds=1),
             "Please retry in approximately 20s.",
         ),
-        (0, "Number of log entries inserted into the DB: 0"),
-        (3, "Number of log entries inserted into the DB: 3"),
+        (FetchResult(), "Number of log entries inserted into the DB: 0"),
+        (FetchResult(3, 1), "Number of log entries inserted into the DB: 3"),
     ],
 )
 def test_fetch_cli_reports_result(
     capsys: pytest.CaptureFixture[str],
-    result: int | timedelta,
+    result: FetchResult | timedelta,
     message: str,
 ) -> None:
     args = Namespace(db_path=Path("db.sqlite"), archive=False)
@@ -113,6 +119,11 @@ def test_fetch_cli_reports_result(
         fetch_cli(args)
     output = capsys.readouterr()
     assert output.out == ""
+    if isinstance(result, FetchResult):
+        message += (
+            f"\nNumber of list files fetched: {result.num_succeeded}"
+            f"\nNumber of list files failed: {result.num_failed}"
+        )
     assert output.err == f"{message}\n"
 
 
@@ -239,6 +250,7 @@ def test_set_download_args_with_options() -> None:
 
 @patch("houou_logs.download.download")
 def test_download_cli_calls_download(mock_download: Mock) -> None:
+    mock_download.return_value = DownloadResult(1)
     args = Namespace(db_path=Path("db.sqlite"), players=4, length="h", limit=1)
     download_cli(args)
     mock_download.assert_called_once_with(Path("db.sqlite"), 4, "h", 1)
@@ -252,7 +264,7 @@ def test_set_validate_args() -> None:
 
 @patch("houou_logs.validate.validate")
 def test_validate_cli_calls_validate(mock_validate: Mock) -> None:
-    mock_validate.return_value = (False, 1, 2)
+    mock_validate.return_value = ValidateResult(2, 1)
     args = Namespace(db_path=Path("db.sqlite"))
     validate_cli(args)
     mock_validate.assert_called_once_with(Path("db.sqlite"))
@@ -336,6 +348,7 @@ def test_main_accepts_argument_sequence(
     mock_fetch: Mock,
     argv: Sequence[str],
 ) -> None:
+    mock_fetch.return_value = FetchResult()
     assert main(argv) == SUCCESS_EXIT_CODE
     mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=False)
 
@@ -347,6 +360,7 @@ def test_main_without_arguments_uses_sys_argv(
 ) -> None:
     monkeypatch.setattr("sys.argv", ["houou-logs", "fetch", "db.sqlite"])
 
+    mock_fetch.return_value = FetchResult()
     assert main() == SUCCESS_EXIT_CODE
     mock_fetch.assert_called_once_with(Path("db.sqlite"), archive=False)
 
@@ -505,6 +519,71 @@ def test_main_returns_io_error_code_without_traceback(
     captured = capsys.readouterr()
     assert captured.err == "I/O error: network is unreachable\n"
     assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("command", ["fetch", "yakuman"])
+@pytest.mark.parametrize("status", [429, 503])
+@pytest.mark.parametrize(
+    "retry_after",
+    [None, "3600", "Wed, 21 Oct 2026 07:28:00 GMT"],
+)
+def test_main_index_http_error_displays_retry_after(
+    command: str,
+    status: int,
+    retry_after: str | None,
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    response = Response()
+    response.status_code = status
+    if retry_after is not None:
+        response.headers["Retry-After"] = retry_after
+    error = HTTPError("index request failed", response=response)
+    _check_index_request_failure(command, error, db_path)
+    category = "Client" if status == 429 else "Server"
+    expected = f"I/O error: {status} {category} Error: None for url: None"
+    if retry_after is not None:
+        expected += f"; Retry-After: {retry_after}"
+    assert capsys.readouterr().err == expected + "\n"
+
+
+@pytest.mark.parametrize("command", ["fetch", "yakuman"])
+def test_main_index_network_error_without_response(
+    command: str,
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    error = NiquestsConnectionError("connection failed")
+    _check_index_request_failure(command, error, db_path)
+    assert capsys.readouterr().err == "I/O error: connection failed\n"
+
+
+def _check_index_request_failure(
+    command: str,
+    error: Exception,
+    db_path: Path,
+) -> None:
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        db.insert_file_index(conn.cursor(), "existing.gz", 123)
+    argv = [command, str(db_path)]
+    if command == "yakuman":
+        argv.extend(["2025", "1"])
+    before = datetime.now(UTC)
+    with patch(f"houou_logs.{command}.create_session") as create_session:
+        session = create_session.return_value.__enter__.return_value
+        if isinstance(error, HTTPError):
+            session.get.return_value = error.response
+        else:
+            session.get.side_effect = error
+        assert main(argv) == IO_ERROR_EXIT_CODE
+    with db.open_db(db_path) as conn:
+        assert conn.execute("SELECT * FROM file_index").fetchall() == [
+            ("existing.gz", 123),
+        ]
+        assert db.count_all_ids(conn.cursor()) == 0
+        if command == "fetch":
+            assert db.get_fetch_attempt_time(conn.cursor(), "latest") >= before
 
 
 @patch("houou_logs.fetch.fetch")
@@ -783,7 +862,7 @@ def test_main_fetch_handles_invalid_file_response(
         create_session.return_value.__enter__.return_value.get.return_value = (
             response
         )
-        assert main(["fetch", str(db_path)]) == SUCCESS_EXIT_CODE
+        assert main(["fetch", str(db_path)]) == IO_ERROR_EXIT_CODE
     captured = capsys.readouterr()
     assert "Traceback" not in captured.out + captured.err
     assert filename in captured.out
@@ -815,3 +894,32 @@ def test_main_yakuman_handles_invalid_response_encoding(
     captured = capsys.readouterr()
     assert "Traceback" not in captured.out + captured.err
     assert "Number of log entries inserted" not in captured.err
+
+
+@pytest.mark.parametrize(
+    ("result", "exit_code"),
+    [
+        (FetchResult(), SUCCESS_EXIT_CODE),
+        (FetchResult(0, 2), SUCCESS_EXIT_CODE),
+        (FetchResult(2, 2), SUCCESS_EXIT_CODE),
+        (FetchResult(0, 0, 3), IO_ERROR_EXIT_CODE),
+        (FetchResult(1, 1, 1), IO_ERROR_EXIT_CODE),
+        (FetchResult(1, 1, 1, stopped=True), IO_ERROR_EXIT_CODE),
+        (FetchResult(stopped=True), IO_ERROR_EXIT_CODE),
+        (timedelta(minutes=1), SUCCESS_EXIT_CODE),
+    ],
+)
+def test_main_fetch_reports_outcomes(
+    capsys: pytest.CaptureFixture[str],
+    result: FetchResult | timedelta,
+    exit_code: int,
+) -> None:
+    with patch("houou_logs.fetch.fetch", return_value=result):
+        assert main(["fetch", "db.sqlite"]) == exit_code
+    output = capsys.readouterr().err
+    if isinstance(result, FetchResult):
+        assert f"list files fetched: {result.num_succeeded}" in output
+        assert f"list files failed: {result.num_failed}" in output
+        assert ("Fetch stopped" in output) == result.stopped
+    else:
+        assert "Please retry" in output

@@ -79,7 +79,15 @@ def test_commands_upgrade_legacy_logs_indexes_without_changing_data(
     for _ in range(2):
         match command:
             case "download":
-                assert download.download(db_path, 4, None, None) == 0
+                assert (
+                    download.download(
+                        db_path,
+                        4,
+                        None,
+                        None,
+                    )
+                    == download.DownloadResult()
+                )
             case "export":
                 assert (
                     export.export(
@@ -93,7 +101,9 @@ def test_commands_upgrade_legacy_logs_indexes_without_changing_data(
                     == 0
                 )
             case "validate":
-                assert validate.validate(db_path) == (False, 0, 1)
+                assert validate.validate(db_path) == validate.ValidateResult(
+                    num_ids=1,
+                )
         with closing(db.open_db(db_path)) as conn:
             assert_logs_indexes(conn)
             assert conn.execute("SELECT * FROM logs").fetchall() == before

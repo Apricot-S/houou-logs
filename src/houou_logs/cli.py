@@ -21,6 +21,7 @@ from houou_logs.exceptions import ExternalResponseParseError, UserInputError
 SUCCESS_EXIT_CODE = 0
 IO_ERROR_EXIT_CODE = 1
 USER_INPUT_ERROR_EXIT_CODE = 2
+INVALID_LOG_EXIT_CODE = 3
 INTERRUPTED_EXIT_CODE = 130
 EXTERNAL_IO_ERRORS = (
     OSError,
@@ -87,14 +88,27 @@ def format_retry_delay(remaining: timedelta) -> str:
     return " ".join(parts)
 
 
-def fetch_cli(args: Namespace) -> None:
+def fetch_cli(args: Namespace) -> int:
     result = fetch.fetch(args.db_path, archive=args.archive)
     if isinstance(result, timedelta):
         delay = format_retry_delay(result)
-        msg = f"Please retry in approximately {delay}."
-    else:
-        msg = f"Number of log entries inserted into the DB: {result}"
-    print(msg, file=sys.stderr)
+        print(f"Please retry in approximately {delay}.", file=sys.stderr)
+        return SUCCESS_EXIT_CODE
+
+    print(
+        f"Number of log entries inserted into the DB: {result.num_inserted}",
+        file=sys.stderr,
+    )
+    print(
+        f"Number of list files fetched: {result.num_succeeded}",
+        file=sys.stderr,
+    )
+    print(f"Number of list files failed: {result.num_failed}", file=sys.stderr)
+    if result.stopped:
+        print("Fetch stopped due to a temporary error.", file=sys.stderr)
+    if result.num_failed or result.stopped:
+        return IO_ERROR_EXIT_CODE
+    return SUCCESS_EXIT_CODE
 
 
 def set_yakuman_args(parser: ArgumentParser) -> ArgumentParser:
@@ -157,19 +171,30 @@ def set_download_args(parser: ArgumentParser) -> ArgumentParser:
     parser.add_argument(
         "--limit",
         type=int,
-        help="Max number of logs to download. If omitted, all available logs are downloaded.",  # noqa: E501
+        help="Max number of logs to process, including failures. If omitted, all available logs are processed.",  # noqa: E501
     )
     return parser
 
 
-def download_cli(args: Namespace) -> None:
-    num_logs = download.download(
+def download_cli(args: Namespace) -> int:
+    result = download.download(
         args.db_path,
         args.players,
         args.length,
         args.limit,
     )
-    print(f"Number of logs downloaded: {num_logs}", file=sys.stderr)
+    print(f"Number of logs processed: {result.num_processed}", file=sys.stderr)
+    print(
+        f"Number of logs downloaded: {result.num_succeeded}",
+        file=sys.stderr,
+    )
+    print(f"Number of logs failed: {result.num_failed}", file=sys.stderr)
+
+    if result.stopped:
+        print("Download stopped due to a temporary error.", file=sys.stderr)
+    if result.num_failed or result.stopped:
+        return IO_ERROR_EXIT_CODE
+    return SUCCESS_EXIT_CODE
 
 
 def set_validate_args(parser: ArgumentParser) -> ArgumentParser:
@@ -182,13 +207,19 @@ def set_validate_args(parser: ArgumentParser) -> ArgumentParser:
     return parser
 
 
-def validate_cli(args: Namespace) -> None:
-    were_errors, num_valid, total = validate.validate(args.db_path)
-    if not were_errors:
+def validate_cli(args: Namespace) -> int:
+    result = validate.validate(args.db_path)
+    print(f"Number of logs checked: {result.num_checked}", file=sys.stderr)
+    print(f"Number of valid logs: {result.num_valid}", file=sys.stderr)
+    print(f"Number of invalid logs reset: {result.num_reset}", file=sys.stderr)
+    print(f"Number of all IDs in the DB: {result.num_ids}", file=sys.stderr)
+    if result.num_reset:
         print(
-            f"Everything is fine, checked {num_valid}/{total} (valid logs / all IDs)",  # noqa: E501
+            "Run 'houou-logs download' with the same DB path to download reset logs again.",  # noqa: E501
             file=sys.stderr,
         )
+        return INVALID_LOG_EXIT_CODE
+    return SUCCESS_EXIT_CODE
 
 
 def set_export_args(parser: ArgumentParser) -> ArgumentParser:
@@ -244,6 +275,10 @@ def export_cli(args: Namespace) -> None:
 
 def format_external_io_error(error: Exception) -> str:
     message = str(error) or error.__class__.__name__
+    if isinstance(error, RequestException) and error.response is not None:
+        retry_after = error.response.headers.get("Retry-After")
+        if retry_after:
+            message += f"; Retry-After: {retry_after}"
     return f"I/O error: {message}"
 
 
@@ -309,7 +344,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        args.func(args)
+        exit_code = args.func(args)
     except KeyboardInterrupt:
         print("Interrupted by user.", file=sys.stderr)
         return INTERRUPTED_EXIT_CODE
@@ -323,7 +358,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(format_external_io_error(e), file=sys.stderr)
         return IO_ERROR_EXIT_CODE
     else:
-        return SUCCESS_EXIT_CODE
+        return SUCCESS_EXIT_CODE if exit_code is None else exit_code
 
 
 if __name__ == "__main__":

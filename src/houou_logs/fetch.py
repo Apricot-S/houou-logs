@@ -6,17 +6,22 @@ import io
 import re
 import zlib
 from contextlib import closing
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import niquests
-from niquests.exceptions import RequestException
+from niquests.exceptions import HTTPError, RequestException
 from tqdm import tqdm
 
 from houou_logs import db
 from houou_logs.exceptions import ExternalResponseParseError
 from houou_logs.log_id import HOUOU_ARCHIVE_PREFIX, iter_log_entries
-from houou_logs.session import TIMEOUT, create_session
+from houou_logs.session import (
+    TEMPORARY_HTTP_STATUSES,
+    TIMEOUT,
+    create_session,
+)
 
 MIN_FETCH_INTERVAL = timedelta(minutes=20)
 FETCH_KIND_LATEST = "latest"
@@ -40,6 +45,14 @@ FILE_INDEX_ENTRIES_PATTERN = re.compile(
 EMPTY_FILE_INDEX_PATTERN = re.compile(
     r"^\s*list\s*\(\s*(?:\[\s*\])?\s*\)\s*;\s*$",
 )
+
+
+@dataclass
+class FetchResult:
+    num_inserted: int = 0
+    num_succeeded: int = 0
+    num_failed: int = 0
+    stopped: bool = False
 
 
 def should_fetch(
@@ -113,9 +126,9 @@ def filter_houou_files(file_index: dict[str, int]) -> dict[str, int]:
     }
 
 
-def fetch(db_path: str | Path, *, archive: bool) -> int | timedelta:
-    """Return the inserted count, or the retry delay when skipped."""
-    num_logs = 0
+def fetch(db_path: str | Path, *, archive: bool) -> FetchResult | timedelta:
+    """Return file outcomes, or the retry delay when skipped."""
+    result = FetchResult()
     with closing(db.open_db(db_path)) as conn, conn:
         db.setup_table(conn)
         cursor = conn.cursor()
@@ -150,20 +163,45 @@ def fetch(db_path: str | Path, *, archive: bool) -> int | timedelta:
                             validate_body=True,
                         )
                         inserted = db.insert_log_entries(cursor, entries)
+                except RequestException as e:
+                    result.num_failed += 1
+                    conn.rollback()
+                    response = e.response
+                    if (
+                        isinstance(e, HTTPError)
+                        and response is not None
+                        and response.status_code not in TEMPORARY_HTTP_STATUSES
+                    ):
+                        tqdm.write(f"{filename}: {e}")
+                        continue
+
+                    result.stopped = True
+                    message = f"{filename}: temporary fetch failure: {e}"
+                    if response is not None:
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after:
+                            message += f"; Retry-After: {retry_after}"
+                    tqdm.write(
+                        message + "; fetch stopped. "
+                        "Pending files remain unprocessed; "
+                        "run fetch again later to resume.",
+                    )
+                    break
                 except (
-                    RequestException,
                     ExternalResponseParseError,
                     UnicodeDecodeError,
                     OSError,
                     EOFError,
                     zlib.error,
                 ) as e:
+                    result.num_failed += 1
                     conn.rollback()
                     tqdm.write(f"{filename}: {e}")
                     continue
 
                 db.insert_file_index(cursor, filename, size)
                 conn.commit()
-                num_logs += inserted
+                result.num_inserted += inserted
+                result.num_succeeded += 1
 
-    return num_logs
+    return result

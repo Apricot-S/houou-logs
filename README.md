@@ -89,6 +89,21 @@ If the same mode is executed again within 20 minutes, the command exits without 
 
 A failed FileIndex request is still recorded as an attempt, so repeated automated runs do not immediately retry against Tenhou.
 
+List file request failures are handled as follows:
+
+- HTTP 408, 429, 5xx, or network errors stop fetching without automatic retries.
+- Other HTTP errors (such as 404) and invalid list file contents are reported per file, and processing continues.
+
+Any `Retry-After` header is displayed as supplied (seconds or an HTTP date); use it as a guide for when to retry.
+
+Successfully imported files remain committed. Failed or unprocessed files remain eligible for a later run, subject to the same 20-minute interval.
+
+The final summary reports inserted IDs and successful and failed list files.
+Partial failure, complete failure, or stopping due to a temporary error returns
+exit code 1. Unprocessed files are excluded from both file counts.
+Unchanged files, a valid empty index or list, lists containing only existing IDs,
+and skips within the 20-minute interval return exit code 0.
+
 #### Fetch log IDs from the latest 7 days (default mode)
 
 ```sh
@@ -139,7 +154,11 @@ Download the log contents (mjlog) into the database using previously fetched log
 
 This command skips logs that are already downloaded and stored, and only fetches log contents for undownloaded IDs that match the specified conditions.
 
-If a log cannot be downloaded, the entry is still marked as processed with an error flag.
+On HTTP 408, 429, or any 5xx response, or a network error, downloading stops immediately without automatic retries.
+The affected ID and remaining IDs stay unprocessed, so a later `download` run can resume. Previously saved logs are preserved.
+If the server sends `Retry-After` (seconds or an HTTP date), it is displayed; wait until that time before restarting.
+
+For other failures, such as HTTP 404 or a response without log content, the entry is marked as processed with an error flag and downloading continues.
 Such entries are skipped by later `download` runs unless they are reset to the undownloaded state.
 
 ```sh
@@ -153,13 +172,20 @@ Options:
 - `-l`, `--length <LENGTH>`  
   Game length: `t` for tonpu (East Only), `h` for hanchan (Two-Wind Match). If omitted, both are included.
 - `--limit <LIMIT>`  
-  Max number of logs to download. If omitted, all available logs are downloaded.
+  Max number of logs to process, including failures. If omitted, all available logs are processed.
 
 Example:
 
 ```sh
 houou-logs download db/2024.db --players 3 --length h --limit 50
 ```
+
+The final summary reports processed, successfully downloaded, and failed counts.
+Processed counts include permanent fetch failures and compression failures; these
+failures do not count as successful downloads. A temporary error stops the run
+and leaves the affected ID unprocessed, outside these counts.
+The exit code is 1 if any log fails or a temporary error stops the run, including
+partial success; otherwise it is 0, including when no logs match.
 
 ### Validate that downloaded logs can be parsed
 
@@ -171,6 +197,12 @@ Validate that all downloaded mjlog XML in the database can be parsed correctly.
 
 If an invalid or unreadable log is found, this command resets that log entry to the undownloaded state.
 This allows a later `download` run to fetch it again.
+
+On completion, the command reports the number of logs checked, valid logs,
+invalid logs reset, and all IDs in the DB separately. Pending IDs are not checked.
+The exit code is 0 when all checked logs are valid (including no logs to check),
+3 when invalid logs were reset, 1 on I/O failure, 2 for invalid arguments,
+and 130 on interruption.
 
 Resets are saved after each batch of up to 1,000 entries has been validated.
 If validation is interrupted or fails, resets from completed batches remain

@@ -8,6 +8,7 @@ import sqlite3
 import zlib
 from collections.abc import Iterator
 from contextlib import closing
+from dataclasses import dataclass
 from pathlib import Path
 
 import niquests
@@ -16,14 +17,18 @@ from niquests.exceptions import RequestException
 from tqdm import tqdm
 
 from houou_logs import db
-from houou_logs.exceptions import LogFetchError
+from houou_logs.exceptions import LogFetchError, TemporaryLogFetchError
 from houou_logs.input_validation import (
     validate_db_path,
     validate_length,
     validate_limit,
     validate_players,
 )
-from houou_logs.session import TIMEOUT, create_session
+from houou_logs.session import (
+    TEMPORARY_HTTP_STATUSES,
+    TIMEOUT,
+    create_session,
+)
 
 DOWNLOAD_BATCH_SIZE = 1000
 
@@ -36,12 +41,29 @@ _LOG_PREFIX = re.compile(
 )
 
 
+@dataclass
+class DownloadResult:
+    num_succeeded: int = 0
+    num_failed: int = 0
+    stopped: bool = False
+
+    @property
+    def num_processed(self) -> int:
+        return self.num_succeeded + self.num_failed
+
+
 def build_url(log_id: str) -> str:
     return f"https://tenhou.net/0/log/?{log_id}"
 
 
 def fetch_log_content(session: Session, url: str) -> bytes:
     resp = session.get(url, timeout=TIMEOUT)
+    if resp.status_code in TEMPORARY_HTTP_STATUSES:
+        msg = f"temporary fetch failure: HTTP {resp.status_code}"
+        retry_after = resp.headers.get("Retry-After")
+        if retry_after:
+            msg += f"; Retry-After: {retry_after}"
+        raise TemporaryLogFetchError(msg)
     if resp.status_code != niquests.codes["ok"]:
         msg = f"failed to fetch: HTTP {resp.status_code}"
         raise LogFetchError(msg)
@@ -66,7 +88,12 @@ def fetch_log_content_for_download(
 
     try:
         content = fetch_log_content(session, url)
-    except (RequestException, LogFetchError, UnicodeDecodeError) as e:
+    except TemporaryLogFetchError:
+        raise
+    except RequestException as e:
+        msg = f"temporary fetch failure: {e}"
+        raise TemporaryLogFetchError(msg) from e
+    except (LogFetchError, UnicodeDecodeError) as e:
         tqdm.write(f"{log_id}: {e}")
         return (True, b"")
 
@@ -118,7 +145,7 @@ def download(
     players: int | None,
     length: str | None,
     limit: int | None,
-) -> int:
+) -> DownloadResult:
     validate_db_path(db_path)
     if players is not None:
         validate_players(players)
@@ -127,7 +154,7 @@ def download(
     if limit is not None:
         validate_limit(limit)
 
-    num_logs = 0
+    result = DownloadResult()
     with closing(db.open_db(db_path)) as conn, conn:
         db.create_logs_indexes(conn)
         conn.commit()
@@ -150,10 +177,18 @@ def download(
                     DOWNLOAD_BATCH_SIZE,
                 ):
                     for log_id in ids:
-                        was_error, content = fetch_log_content_for_download(
-                            session,
-                            log_id,
-                        )
+                        try:
+                            was_error, content = (
+                                fetch_log_content_for_download(session, log_id)
+                            )
+                        except TemporaryLogFetchError as e:
+                            tqdm.write(
+                                f"{log_id}: {e}; download stopped. "
+                                "Pending logs remain unprocessed; "
+                                "run download again later to resume.",
+                            )
+                            result.stopped = True
+                            return result
 
                         compressed_content = None
                         if not was_error:
@@ -167,9 +202,11 @@ def download(
                             was_error,
                             compressed_content,
                         )
-                        num_logs += 1
+                        conn.commit()
+                        if was_error:
+                            result.num_failed += 1
+                        else:
+                            result.num_succeeded += 1
                         progress.update(1)
 
-                        conn.commit()
-
-    return num_logs
+    return result
