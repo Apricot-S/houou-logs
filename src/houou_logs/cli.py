@@ -275,6 +275,10 @@ def export_cli(args: Namespace) -> None:
 
 def format_external_io_error(error: Exception) -> str:
     message = str(error) or error.__class__.__name__
+    if isinstance(error, RequestException) and error.response is not None:
+        retry_after = error.response.headers.get("Retry-After")
+        if retry_after:
+            message += f"; Retry-After: {retry_after}"
     return f"I/O error: {message}"
 
 

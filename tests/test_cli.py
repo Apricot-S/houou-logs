@@ -11,6 +11,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 from niquests import Response
+from niquests.exceptions import ConnectionError as NiquestsConnectionError
+from niquests.exceptions import HTTPError
 
 from houou_logs import db
 from houou_logs.cli import (
@@ -517,6 +519,71 @@ def test_main_returns_io_error_code_without_traceback(
     captured = capsys.readouterr()
     assert captured.err == "I/O error: network is unreachable\n"
     assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("command", ["fetch", "yakuman"])
+@pytest.mark.parametrize("status", [429, 503])
+@pytest.mark.parametrize(
+    "retry_after",
+    [None, "3600", "Wed, 21 Oct 2026 07:28:00 GMT"],
+)
+def test_main_index_http_error_displays_retry_after(
+    command: str,
+    status: int,
+    retry_after: str | None,
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    response = Response()
+    response.status_code = status
+    if retry_after is not None:
+        response.headers["Retry-After"] = retry_after
+    error = HTTPError("index request failed", response=response)
+    _check_index_request_failure(command, error, db_path)
+    category = "Client" if status == 429 else "Server"
+    expected = f"I/O error: {status} {category} Error: None for url: None"
+    if retry_after is not None:
+        expected += f"; Retry-After: {retry_after}"
+    assert capsys.readouterr().err == expected + "\n"
+
+
+@pytest.mark.parametrize("command", ["fetch", "yakuman"])
+def test_main_index_network_error_without_response(
+    command: str,
+    db_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    error = NiquestsConnectionError("connection failed")
+    _check_index_request_failure(command, error, db_path)
+    assert capsys.readouterr().err == "I/O error: connection failed\n"
+
+
+def _check_index_request_failure(
+    command: str,
+    error: Exception,
+    db_path: Path,
+) -> None:
+    with db.open_db(db_path) as conn:
+        db.setup_table(conn)
+        db.insert_file_index(conn.cursor(), "existing.gz", 123)
+    argv = [command, str(db_path)]
+    if command == "yakuman":
+        argv.extend(["2025", "1"])
+    before = datetime.now(UTC)
+    with patch(f"houou_logs.{command}.create_session") as create_session:
+        session = create_session.return_value.__enter__.return_value
+        if isinstance(error, HTTPError):
+            session.get.return_value = error.response
+        else:
+            session.get.side_effect = error
+        assert main(argv) == IO_ERROR_EXIT_CODE
+    with db.open_db(db_path) as conn:
+        assert conn.execute("SELECT * FROM file_index").fetchall() == [
+            ("existing.gz", 123),
+        ]
+        assert db.count_all_ids(conn.cursor()) == 0
+        if command == "fetch":
+            assert db.get_fetch_attempt_time(conn.cursor(), "latest") >= before
 
 
 @patch("houou_logs.fetch.fetch")
